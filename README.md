@@ -1,8 +1,9 @@
-# F# hydration demo: one view, two runtimes
+# F# hydration demo: two Elmish components, server-rendered
 
-A small, self-contained example of writing a view **once** in F# and having it rendered
-by .NET on the server and then *adopted* by [lit](https://lit.dev) in the browser —
-without Node on the server and without `@lit-labs/ssr`.
+A small, self-contained example of writing components **once** in F# — model, update and
+view — rendering them to HTML with .NET, and having [lit](https://lit.dev) *adopt* that
+HTML in the browser, where each becomes an independent Elmish program. No Node on the
+server, and no `@lit-labs/ssr`.
 
 ```bash
 dotnet run --project Server
@@ -14,9 +15,10 @@ time.
 
 ## What this shows
 
-The page arrives fully rendered from ASP.NET. When the script loads, lit **hydrates** it:
-it takes ownership of the existing DOM rather than replacing it, and the button starts
-working. No element is re-created, and no markup is rendered twice.
+The page arrives fully rendered from ASP.NET: a counter and a basket, each in its own
+container. When the script loads, each becomes an Elmish program that **adopts** its own
+markup — taking ownership of the existing DOM rather than replacing it. No element is
+re-created, no markup is rendered twice, and the two loops never touch each other.
 
 `Shared/Views.fs` is compiled twice — by the .NET compiler against
 [`Lit.Server.Unofficial`](https://www.nuget.org/packages/Lit.Server.Unofficial), and by
@@ -25,28 +27,34 @@ working. No element is re-created, and no markup is rendered twice.
 resolve `open Lit`; a project references one or the other, never both. So there is no
 conditional compilation, and no template written twice in two languages.
 
+Elmish itself is ordinary F# with no browser in it, so `init` and `update` compile on
+both sides too. That is what lets the server render from the model the browser is about
+to start with, without shipping it as JSON:
+
 ```fsharp
-let page (count: int) (onClick: unit -> unit) =
-    html
-        $"""<div class="card">
-              <h2>Packing list</h2>
-              <table><tbody>{Lit.ofList (items |> List.map row)}</tbody></table>
-              <p>Clicked <b class="count">{count}</b> times.</p>
-              <button type="button" @click={Ev(fun _ -> onClick ())}>Click me</button>
-            </div>"""
+// Server: run the same init the browser will
+let counter, _ = Views.Counter.init ()
+Page().Counter(toHydratableNode (Views.Counter.view counter ignore)).Render()
 ```
 
-On the server, `@click` is dropped — a handler is a closure and cannot be serialised.
-In the browser it becomes a real listener when lit adopts the markup.
+```fsharp
+// Client: one program per component, each adopting its own container
+Program.mkProgram Views.Counter.init Views.Counter.update Views.Counter.view
+|> Program.withLitHydrated "counter"
+|> Program.run
+```
+
+On the server `@click` is dropped — a handler is a closure and cannot be serialised. In
+the browser it becomes a real listener the moment lit adopts the markup.
 
 ## Layout
 
 | | |
 |---|---|
-| `Shared/Views.fs` | the view both sides compile |
-| `Server/Program.fs` | minimal ASP.NET; renders with `toHydratableNode` |
-| `Server/page.html` | the page shell, an `HtmlTypeProvider` template |
-| `Client/App.fs` | calls `Hydrate.adopt` |
+| `Shared/Views.fs` | both components: model, msg, init, update, view |
+| `Server/Program.fs` | minimal ASP.NET; renders each with `toHydratableNode` |
+| `Server/page.html` | the page shell, an `HtmlTypeProvider` template, one div per component |
+| `Client/App.fs` | two Elmish programs, six lines |
 
 The server composes the rendered view into the page as a `Node`, the type
 [`HtmlTypeProvider`](https://github.com/OnurGumus/HtmlTypeProvider) templates already
@@ -62,10 +70,15 @@ Turn JavaScript off and reload — the table is still there, because .NET render
 Or hold on to a node and watch it survive an update:
 
 ```js
-const row = document.querySelector('#app tbody tr')
-document.querySelector('#app button').click()
-document.querySelector('#app tbody tr') === row   // true: lit patched, it did not rebuild
+const card = document.querySelector('#basket section')
+document.querySelector('#counter button:nth-of-type(2)').click()   // the counter's +
+document.querySelector('#basket section') === card                 // true: untouched
+document.querySelector('#basket tbody tr button').click()          // remove a row
+document.querySelector('#counter .value').textContent              // unchanged
 ```
+
+The counter's `<section>` and the basket's are each the same DOM object before and after
+both interactions: two loops, patching their own DOM, ignoring each other's.
 
 A console warning beginning `lit could not adopt` means it fell back to a full render.
 That is `Hydrate.adopt` doing its job: lit's `hydrate` throws part way through when the
@@ -74,24 +87,35 @@ markup does not match, so the alternative to catching it is a half-wired page.
 ## Two rules worth knowing
 
 **Hydrate the element the markers were written into.** The root marker wraps whatever the
-template rendered, so here it is `<div id="app">`, not the card inside it. Hydrating the
-card places lit inside its own marker, where it never finds it.
+template rendered, so here they are `<div id="counter">` and `<div id="basket">`, not the
+cards inside them. Hydrating a card places lit inside its own marker, where it never
+finds it.
 
-**The client must pass the same template and the same data.** A different template is a
-digest mismatch: caught, reported, and rendered normally. Different data hydrates cleanly
-and then shows values the server never rendered, which nothing catches.
+**The client must start from the model the server rendered.** A different template is a
+digest mismatch: caught, reported, and rendered normally. A different *model* hydrates
+cleanly and then shows values the server never sent, which nothing catches. Here both
+sides call the same `init`, so it holds by construction; an init that depends on server
+state has to be handed that state.
 
 ## What it does not do
 
 There is no HMR. The client is compiled and bundled before the server starts, so editing
-`Client/App.fs` needs a restart. A dev server could be proxied instead, at the cost of a
-second moving part.
+a view needs a restart. A dev server could be proxied instead, at the cost of a second
+moving part.
+
+`Lit.Server` renders templates, not components, so a `HookComponent` or a `LitElement`
+has no server rendering. Under Elmish that costs less than it sounds: the model is
+`useState` and `Cmd` is `useEffect`, so the state and the effects live in the loop and
+the view stays a function of the model — which is the part both compilers can render.
+Directives it cannot honour faithfully, such as `styleMap` or `until`, raise rather than
+being approximated.
 
 ## Packages
 
 | | |
 |---|---|
 | `Fable.Lit.Unofficial` | lit bindings for Fable, plus `Hydrate.adopt` |
+| `Fable.Lit.Elmish.Unofficial` | `Program.withLitHydrated` |
 | `Lit.Server.Unofficial` | renders those templates to HTML on .NET |
 | `HtmlTypeProvider` | typed HTML page templates |
 

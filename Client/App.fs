@@ -1,18 +1,15 @@
-/// Takes over the page the server rendered.
+/// Starts one Elmish program per component, each adopting the markup the server sent.
 module App
 
-open Browser
-open Lit
+open Elmish
+open Lit.Elmish
 
-/// The element the server rendered into. It must be the one that contains lit's
-/// markers, not the card inside it.
-let private container = document.getElementById "app" :> Browser.Types.Element
+// Two independent loops on one page. Neither knows about the other; each adopts the
+// container its own markers were written into, and renders normally from then on.
+Program.mkProgram Views.Counter.init Views.Counter.update Views.Counter.view
+|> Program.withLitHydrated "counter"
+|> Program.run
 
-let mutable private count = 0
-
-let rec private bump () =
-    count <- count + 1
-    Lit.render container (Views.page count bump)
-
-// Adopts the server's DOM if the markup matches, and renders over it if not.
-Hydrate.adopt container (Views.page count bump)
+Program.mkProgram Views.Basket.init Views.Basket.update Views.Basket.view
+|> Program.withLitHydrated "basket"
+|> Program.run

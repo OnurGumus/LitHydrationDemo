@@ -1,4 +1,4 @@
-/// Renders the page on every request, from the same F# view the browser runs.
+/// Renders both components on every request, from the same F# the browser runs.
 module Server
 
 open Microsoft.AspNetCore.Builder
@@ -19,11 +19,18 @@ let main args =
     app.MapGet(
         "/",
         System.Func<IResult>(fun () ->
-            // toHydratableNode, not toNode: the same HTML plus the comment markers lit
-            // needs in order to adopt it. The client must render the same view with the
-            // same count.
-            let content = toHydratableNode (Views.page 0 ignore)
-            Results.Content(Page().Content(content).Render(), "text/html"))
+            // The same init the browser will run, so both sides render the same model.
+            // Handlers are dropped on the server, hence `ignore` for dispatch.
+            let counter, _ = Views.Counter.init ()
+            let basket, _ = Views.Basket.init ()
+
+            let html =
+                Page()
+                    .Counter(toHydratableNode (Views.Counter.view counter ignore))
+                    .Basket(toHydratableNode (Views.Basket.view basket ignore))
+                    .Render()
+
+            Results.Content(html, "text/html"))
     )
     |> ignore
 

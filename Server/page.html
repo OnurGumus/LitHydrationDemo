@@ -2,25 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Lit.Server hydration</title>
+    <title>Two Elmish components, server-rendered</title>
     <style>
-      body { font: 15px system-ui; margin: 2rem; color: #16202c; }
-      .card { border: 1px solid #d8dee6; border-radius: 10px; padding: 1rem 1.25rem; max-width: 34rem; }
-      table { border-collapse: collapse; margin: .5rem 0 1rem; }
-      td { border-bottom: 1px solid #eef1f5; padding: .3rem .8rem .3rem 0; }
-      button { font: inherit; padding: .4rem .8rem; }
-      .note { color: #5b6876; max-width: 34rem; }
+      body { font: 15px/1.5 system-ui; margin: 2rem; color: #16202c; }
+      .card { border: 1px solid #d8dee6; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; max-width: 30rem; }
+      h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
+      table { border-collapse: collapse; margin: .25rem 0 .75rem; }
+      td { border-bottom: 1px solid #eef1f5; padding: .3rem 1rem .3rem 0; }
+      button { font: inherit; padding: .25rem .7rem; }
+      .note { color: #5b6876; max-width: 30rem; }
     </style>
   </head>
   <body>
-    <p class="note">This page arrived fully rendered from .NET (edit me and just re-run). Nothing below was built
-      by JavaScript. When the module loads it <em>adopts</em> this markup rather than
-      replacing it: the nodes stay, and the button starts working.</p>
-    <!-- The container matters. The server's root marker wraps whatever the template
-         renders, so the element you hydrate must be the one those markers were written
-         into -- here, this div. Hydrating the card itself would put lit inside its own
-         root marker, where it never finds it. -->
-    <div id="app">${Content}</div>
+    <p class="note">Both cards below arrived as HTML from .NET. Each is an independent
+      Elmish program that <em>adopts</em> its own markup when the script loads: the nodes
+      stay, and the two loops never touch each other.</p>
+
+    <!-- One container per component. Each is the element its own markers were written
+         into, and each is hydrated separately. -->
+    <div id="counter">${Counter}</div>
+    <div id="basket">${Basket}</div>
+
     <script type="module" src="/app.js"></script>
   </body>
 </html>
