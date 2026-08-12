@@ -103,7 +103,8 @@ state has to be handed that state.
 npm run dev
 ```
 
-Same page on the same port, but a saved view now reaches the browser without a reload,
+From a fresh clone too: npm installs what it needs on the way in, the way `dotnet run`
+does. Same page on the same port, but a saved view now reaches the browser without a reload,
 and without losing what is on screen: increment the counter, remove a row, edit
 `Shared/Views.fs`, and the new markup arrives with the count and the basket as you left
 them. Three things run — Fable watching the F#, Vite serving the result, and the server
