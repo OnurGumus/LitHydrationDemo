@@ -97,11 +97,36 @@ cleanly and then shows values the server never sent, which nothing catches. Here
 sides call the same `init`, so it holds by construction; an init that depends on server
 state has to be handed that state.
 
-## What it does not do
+## Editing it while it runs
 
-There is no HMR. The client is compiled and bundled before the server starts, so editing
-a view needs a restart. A dev server could be proxied instead, at the cost of a second
-moving part.
+```bash
+npm run dev
+```
+
+Same page on the same port, but a saved view now reaches the browser without a reload,
+and without losing what is on screen: increment the counter, remove a row, edit
+`Shared/Views.fs`, and the new markup arrives with the count and the basket as you left
+them. Three things run — Fable watching the F#, Vite serving the result, and the server
+restarting when a file it compiles changes.
+
+The state survives because `Program.withLitHydrated` records the running program on the
+element it renders into. A hot update re-runs the module, the module mounts again, and
+the second mount finds the first: it stops it, takes its model, and renders. Two lines
+say so — `HMR.acceptSelf()` in `Client/App.fs`, which asks the dev server to re-run the
+module rather than reload the page, and nothing else.
+
+A dev server is doing real work here. What it provides is one module graph: every
+version of the code shares the *same* lit. Rebuilding a self-contained bundle and
+importing it again looks simpler and is not, because the page then holds two copies of
+lit, and the second is asked to patch DOM whose parts belong to the first —
+`part._$setValue is not a function`, when their internals happen to be named
+differently, and two template caches when they are not.
+
+The server is restarted rather than hot-reloaded: F# has no hot reload, and a shared
+view is compiled into the server as well. That costs a few seconds, and it is what keeps
+the *next* page load rendering the view you just wrote.
+
+## What it does not do
 
 `Lit.Server` renders templates, not components, so a `HookComponent` or a `LitElement`
 has no server rendering. Under Elmish that costs less than it sounds: the model is

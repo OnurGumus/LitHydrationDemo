@@ -9,7 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fable.Elmish" Version="5.0.2" />
-    <PackageReference Include="Lit.Server.Unofficial" Version="2.5.0" />
+    <PackageReference Include="Lit.Server.Unofficial" Version="2.6.0" />
     <PackageReference Include="HtmlTypeProvider" Version="0.9.1" />
   </ItemGroup>
 
@@ -38,8 +38,11 @@
   <!-- Never in the editor. A design-time build is the IDE asking what this project
        compiles, several times a minute; running npm, Fable and vite inside that is how a
        language server appears to hang. -->
+  <!-- Nor under npm run dev, which passes SkipClientBuild: Fable and vite are already
+       watching there, and building them again on every server restart would empty the
+       directory the browser is fetching from. -->
   <Target Name="BuildClient" BeforeTargets="BeforeBuild" DependsOnTargets="RestoreTools;EnsureNodeModules"
-          Condition="'$(DesignTimeBuild)' != 'true'"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipClientBuild)' != 'true'"
           Inputs="$(MSBuildProjectDirectory)/../Shared/Views.fs;$(MSBuildProjectDirectory)/../Client/App.fs;$(MSBuildProjectDirectory)/../Client/Client.fsproj"
           Outputs="$(MSBuildProjectDirectory)/wwwroot/app.js">
     <Message Importance="high" Text="Compiling and bundling the client..." />

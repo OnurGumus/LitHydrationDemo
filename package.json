@@ -4,13 +4,16 @@
   "type": "module",
   "scripts": {
     "build:client": "dotnet fable Client -o Client/build && vite build",
-    "start": "dotnet run --project Server"
+    "start": "dotnet run --project Server",
+    "dev": "concurrently -k -n client,server -c cyan,green \"dotnet fable watch Client -o Client/build-dev -c Debug --run vite\" \"nodemon --quiet --watch Shared --watch Server --ext fs,html --exec \\\"dotnet run --project Server -p:SkipClientBuild=true -- --hmr\\\"\""
   },
   "dependencies": {
     "lit": "^3",
     "@lit-labs/ssr-client": "^1"
   },
   "devDependencies": {
-    "vite": "^5"
+    "vite": "^5",
+    "concurrently": "^9",
+    "nodemon": "^3"
   }
 }
