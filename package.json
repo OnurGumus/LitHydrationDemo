@@ -1,0 +1,16 @@
+{
+  "name": "lit-hydration-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:client": "dotnet fable Client -o Client/build && vite build",
+    "start": "dotnet run --project Server"
+  },
+  "dependencies": {
+    "lit": "^3",
+    "@lit-labs/ssr-client": "^1"
+  },
+  "devDependencies": {
+    "vite": "^5"
+  }
+}

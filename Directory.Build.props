@@ -1,0 +1,17 @@
+<Project>
+  <PropertyGroup>
+    <!-- The SDK here is a .NET 11 preview, whose F# compiler defaults to language
+         version 11. Ionide 7.31.1 carries an older compiler service that rejects that
+         value outright and then fails every typecheck, so the editor has no IntelliSense
+         at all while the command line builds perfectly well.
+
+         Naming the language version explicitly keeps the preview SDK and gives the
+         editor a value it can parse. Raise it when Ionide ships a compiler service that
+         knows 11.
+
+         (No double hyphen in this comment: MSBuild parses the file as XML, where two of
+         them is a parse error. Compiler flags written out in prose are the easiest way
+         to introduce one by accident, which is how this comment first failed.) -->
+    <LangVersion>10.0</LangVersion>
+  </PropertyGroup>
+</Project>

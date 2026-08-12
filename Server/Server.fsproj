@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Demo.Server</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\Views.fs" Link="Views.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Lit.Server.Unofficial" Version="2.4.0" />
+    <PackageReference Include="HtmlTypeProvider" Version="0.9.1" />
+  </ItemGroup>
+
+  <!-- One command and nothing else: the client is compiled and bundled on the way to
+       building the server, the way BestFitBox's server starts its own client watch
+       rather than asking you to remember a second command.
+
+       (No double hyphen anywhere in this file's comments. MSBuild parses it as XML,
+       where two of them is a parse error, and a command line written out in prose is
+       the easiest way to introduce one by accident.)
+
+       Inputs and Outputs make it incremental, so an unchanged client costs nothing. It
+       is a build step rather than a dev server because what the browser needs here is a
+       static bundle; there is no proxy and no port to keep in step. -->
+  <!-- A fresh clone has neither the Fable tool nor node_modules. -->
+  <Target Name="RestoreTools" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildProjectDirectory)/.." />
+  </Target>
+
+  <Target Name="EnsureNodeModules"
+          Condition="!Exists('$(MSBuildProjectDirectory)/../node_modules') And '$(DesignTimeBuild)' != 'true'">
+    <Message Importance="high" Text="Installing npm packages (first run)..." />
+    <Exec Command="npm install --no-audit --no-fund" WorkingDirectory="$(MSBuildProjectDirectory)/.." />
+  </Target>
+
+  <!-- Never in the editor. A design-time build is the IDE asking what this project
+       compiles, several times a minute; running npm, Fable and vite inside that is how a
+       language server appears to hang. -->
+  <Target Name="BuildClient" BeforeTargets="BeforeBuild" DependsOnTargets="RestoreTools;EnsureNodeModules"
+          Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="$(MSBuildProjectDirectory)/../Shared/Views.fs;$(MSBuildProjectDirectory)/../Client/App.fs;$(MSBuildProjectDirectory)/../Client/Client.fsproj"
+          Outputs="$(MSBuildProjectDirectory)/wwwroot/app.js">
+    <Message Importance="high" Text="Compiling and bundling the client..." />
+    <Exec Command="dotnet fable Client -o Client/build" WorkingDirectory="$(MSBuildProjectDirectory)/.." />
+    <Exec Command="npx vite build" WorkingDirectory="$(MSBuildProjectDirectory)/.." />
+  </Target>
+
+  <!-- The page template is read by the type provider at compile time, and MSBuild has no
+       idea a .fs depends on an .html: without this, editing the template leaves the
+       provider's cached output in place and the old page keeps being served. -->
+  <ItemGroup>
+    <TemplateFiles Include="page.html" />
+  </ItemGroup>
+  <Target Name="TouchOnTemplateChange" BeforeTargets="CoreCompile"
+          Inputs="@(TemplateFiles)" Outputs="$(IntermediateOutputPath)template.stamp">
+    <Touch Files="..\Shared\Views.fs" AlwaysCreate="false" />
+    <Touch Files="$(IntermediateOutputPath)template.stamp" AlwaysCreate="true" />
+  </Target>
+</Project>
