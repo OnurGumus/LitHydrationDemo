@@ -28,7 +28,7 @@ module Counter =
     let view model dispatch =
         html
             $"""<section class="card">
-                  <h2>Counter</h2>
+                  <h2>Counte</h2>
                   <p>Value: <b class="value">{model.Count}</b></p>
                   <button @click={Ev(fun _ -> dispatch Decrement)}>&minus;</button>
                   <button @click={Ev(fun _ -> dispatch Increment)}>+</button>

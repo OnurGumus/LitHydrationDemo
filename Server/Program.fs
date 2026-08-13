@@ -6,6 +6,7 @@ open System.Net.Http
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Http
+open System.Text.Json
 open Microsoft.AspNetCore.SpaServices
 open Microsoft.Extensions.Hosting
 open HtmlTypeProvider
@@ -69,6 +70,24 @@ let private devServerReady =
             return Uri DevServer
          })
 
+/// What only the server knows. A database would answer this; here it is a constant, and
+/// the point is the same either way: the browser cannot work it out, so it has to be told.
+let private sessionFor (_request: HttpRequest) =
+    { Session.Warehouse = "Rotterdam"
+      Session.Bays = 12
+      Session.Reserved = 4 }
+
+/// The session as a script tag the client can read.
+///
+/// System.Text.Json escapes `<` by default, which is what makes this safe to put inside a
+/// script element: a payload containing "</script>" would otherwise end the element and
+/// the rest would be parsed as markup. The one place in this page where that matters.
+let private sessionPayload (session: Session.Session) =
+    Node.Fragment
+        [ Node.RawHtml $"""<script type="application/json" id="{Session.PayloadId}">"""
+          Node.RawHtml(JsonSerializer.Serialize session)
+          Node.RawHtml "</script>" ]
+
 [<EntryPoint>]
 let main args =
     // Passed by `npm run dev` and by nothing else, so `dotnet run` serves exactly what it
@@ -123,6 +142,12 @@ let main args =
                 let palette, _ = Views.Palette.init ()
                 let panel, _ = Views.Panel.init ()
 
+                // Built once, rendered twice, and written down once. Two islands
+                // rendering the same value is the whole reason it has to be written
+                // down: each one hydrates against markup made from it, so both have to
+                // start from the same answer, and only the server has it.
+                let session = sessionFor null
+
                 let html =
                     Page()
                         .Counter(toHydratableNode (Views.Counter.view counter ignore))
@@ -137,6 +162,9 @@ let main args =
                                 [ toShadowRootNode Views.Panel.styles Views.Panel.frame
                                   toHydratableNode (Views.Panel.view panel ignore) ]
                         )
+                        .Bays(toHydratableNode (Session.bays session ignore))
+                        .Summary(toHydratableNode (Session.summary session))
+                        .SessionPayload(sessionPayload session)
                         .Scripts(Node.RawHtml(scripts hotReload))
                         .Render()
 

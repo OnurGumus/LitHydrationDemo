@@ -1,4 +1,4 @@
-# F# hydration demo: four Elmish components, server-rendered
+# F# hydration demo: six Elmish components, server-rendered
 
 A small, self-contained example of writing components **once** in F# — model, update and
 view — rendering them to HTML with .NET, and having [lit](https://lit.dev) *adopt* that
@@ -15,8 +15,8 @@ time.
 
 ## What this shows
 
-The page arrives fully rendered from ASP.NET: a counter, a basket, a palette and a panel,
-each in its own container. When the script loads, each becomes an Elmish program that **adopts**
+The page arrives fully rendered from ASP.NET: a counter, a basket, a palette, a panel, and
+two islands that share one piece of state, each in its own container. When the script loads, each becomes an Elmish program that **adopts**
 its own markup — taking ownership of the existing DOM rather than replacing it. No element
 is re-created, no markup is rendered twice, and the loops never touch each other.
 
@@ -51,7 +51,9 @@ the browser it becomes a real listener the moment lit adopts the markup.
 
 | | |
 |---|---|
-| `Shared/Views.fs` | all three components: model, msg, init, update, view |
+| `Shared/Views.fs` | four components: model, msg, init, update, view |
+| `Shared/Session.fs` | the state two islands share, and the views onto it |
+| `Client/SessionStore.fs` | the store, and where it gets its first value |
 | `Server/Program.fs` | minimal ASP.NET; renders each with `toHydratableNode` |
 | `Server/page.html` | the page shell, an `HtmlTypeProvider` template, one div per component |
 | `Client/App.fs` | four Elmish programs, three lines each |
@@ -194,6 +196,45 @@ platform offers, which is why lit itself borrows them for its components. What l
 inside is paused and resumed along with them, so an element that was merely moved comes back
 with everything it had. Nothing else in the page has this: remove `#counter` and its program
 never hears about it, because a plain `<div>` has no callbacks to lend.
+
+## When the state comes from the server
+
+Every component above starts from an `init` both sides can run, which is why none of them
+needs anything shipped alongside the markup: the server and the browser reach the same
+first model separately, and hydration matches by construction.
+
+The last two cannot. Which warehouse, how many bays — the browser has no way to work that
+out, and *both* islands render from it, so both have to hear the same answer. The server
+builds it once, renders both views from it, and writes it into the page:
+
+```html
+<script type="application/json" id="bfb-session">{"Warehouse":"Rotterdam","Bays":12,"Reserved":4}</script>
+```
+
+The store reads that once, on the way up, and each island's `init` reads the store. So the
+model they start from is the model their markup was rendered from — which is the contract
+hydration rests on, and the reason nothing here is fetched after the fact.
+
+Reserving a bay goes to the store, not to a model. Both islands are subscribed, so both
+move, and neither knows the other exists.
+
+Three details that are easy to get wrong:
+
+**Escaping.** A payload containing `</script>` would end the element and the rest of it
+would be parsed as markup. `System.Text.Json` escapes `<` by default, which is what makes
+this safe; a serialiser configured for "relaxed" escaping would not be.
+
+**The cast.** `unbox` works here because the record is strings and numbers, whose field
+names survive JSON unchanged. A union or an option would need a real codec, written once
+and compiled by both sides — at which point you are choosing between conditional
+compilation and a serialiser that ships for both runtimes.
+
+**Failing soft.** If the payload is missing or unreadable the store warns and starts from a
+default, and the islands then render over the server's markup instead of adopting it —
+a warning and a rebuild rather than a broken page.
+
+Only what the first render needs belongs in there. Everything else can be fetched once the
+page is alive.
 
 ## Editing it while it runs
 

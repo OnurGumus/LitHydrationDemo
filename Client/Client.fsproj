@@ -4,6 +4,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Shared\Views.fs" Link="Views.fs" />
+    <Compile Include="..\Shared\Session.fs" Link="Session.fs" />
+    <Compile Include="SessionStore.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
   <ItemGroup>
