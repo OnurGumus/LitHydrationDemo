@@ -1,0 +1,41 @@
+{
+  // Debugging the server while the client watcher runs separately:
+  //
+  //   npm run dev:client        (Fable + Vite, keeps running across restarts)
+  //   then start this
+  //
+  // Not "npm run dev": that one owns the server and restarts it whenever a shared view
+  // changes, which drops the debugger every time you edit one.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Server (hmr)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-server",
+      "program": "${workspaceFolder}/Server/bin/Debug/net10.0/Demo.Server.dll",
+      // The flag the dev script would have passed: dev scripts, no static files, proxy on.
+      "args": ["--hmr"],
+      // Content root, so wwwroot and page.html are found where the app expects them.
+      "cwd": "${workspaceFolder}/Server",
+      "stopAtEntry": false,
+      "console": "internalConsole"
+    },
+    {
+      "name": "Server (bundled, no dev server)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-server-with-client",
+      "program": "${workspaceFolder}/Server/bin/Debug/net10.0/Demo.Server.dll",
+      "cwd": "${workspaceFolder}/Server",
+      "stopAtEntry": false,
+      "console": "internalConsole"
+    },
+    {
+      "name": "Attach to a running server",
+      "type": "coreclr",
+      "request": "attach",
+      "processName": "Demo.Server"
+    }
+  ]
+}

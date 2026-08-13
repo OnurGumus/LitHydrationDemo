@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // SkipClientBuild because npm run dev:client is already compiling and serving the
+      // client; building it again here would empty the directory Vite is serving from.
+      "label": "build-server",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["build", "${workspaceFolder}/Server", "-p:SkipClientBuild=true"],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      // The whole thing, client bundle included, for the non-dev-server configuration.
+      "label": "build-server-with-client",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["build", "${workspaceFolder}/Server"],
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}
