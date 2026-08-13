@@ -19,9 +19,14 @@ export default ({ command }) => ({
   server: {
     port: 5173,
     strictPort: true,
-    // The page comes from the ASP.NET app on another port, so the modules are
-    // cross-origin. Vite allows that by default; this says so out loud.
-    cors: true,
+    hmr: {
+      // The one thing not routed through the ASP.NET app. Proxying this socket works,
+      // and then editing a shared view restarts that app, the socket drops, and Vite --
+      // reasonably -- decides its dev server has gone and reloads the page. A reload is
+      // the thing all of this exists to avoid, and Vite is not the one restarting, so
+      // the socket goes straight to Vite and survives.
+      clientPort: 5173,
+    },
   },
   build: {
     outDir: '../../Server/wwwroot',

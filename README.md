@@ -110,11 +110,18 @@ and without losing what is on screen: increment the counter, remove a row, edit
 them. Three things run — Fable watching the F#, Vite serving the result, and the server
 restarting when a file it compiles changes.
 
+The page still comes from ASP.NET, and so does everything else it asks for: in dev the
+app proxies what it does not serve itself to the dev server, so the browser sees one
+origin and the markup names no second port. That is `UseSpa` with
+`UseProxyToSpaDevelopmentServer`, guarded to leave `/` alone — it is terminal middleware,
+and unguarded it would answer for the page too, which would end the server rendering
+this demo is about.
+
 The state survives because `Program.withLitHydrated` records the running program on the
 element it renders into. A hot update re-runs the module, the module mounts again, and
-the second mount finds the first: it stops it, takes its model, and renders. Two lines
-say so — `HMR.acceptSelf()` in `Client/App.fs`, which asks the dev server to re-run the
-module rather than reload the page, and nothing else.
+the second mount finds the first: it stops it, takes its model, and renders. One line
+asks for that — `HMR.acceptSelf()` in `Client/App.fs`, which makes the module accept its
+own updates instead of the page being reloaded.
 
 A dev server is doing real work here. What it provides is one module graph: every
 version of the code shares the *same* lit. Rebuilding a self-contained bundle and
@@ -125,7 +132,17 @@ differently, and two template caches when they are not.
 
 The server is restarted rather than hot-reloaded: F# has no hot reload, and a shared
 view is compiled into the server as well. That costs a few seconds, and it is what keeps
-the *next* page load rendering the view you just wrote.
+the *next* page load rendering the view you just wrote. It also has to happen *after* the
+browser has taken the update, since the update is fetched through the very app being
+restarted — hence `nodemon --delay`, which lets the hot update go first.
+
+Two things in dev are switched off rather than configured. Static files: the page asks
+for `/App.js`, `wwwroot` holds `app.js`, and on a case-insensitive filesystem those are
+the same request — the bundle answers, the dev server is never reached, and the page runs
+last build's code while looking perfectly alive. And Vite's hot-update socket connects
+straight to Vite rather than through the proxy, because a socket through the app dies
+whenever the app restarts, and Vite reasonably reads that as "the dev server is gone" and
+reloads the page.
 
 ## What it does not do
 
@@ -144,6 +161,7 @@ being approximated.
 | `Fable.Lit.Elmish.Unofficial` | `Program.withLitHydrated` |
 | `Lit.Server.Unofficial` | renders those templates to HTML on .NET |
 | `HtmlTypeProvider` | typed HTML page templates |
+| `Microsoft.AspNetCore.SpaServices.Extensions` | dev only: proxies to the dev server |
 
 The first two come from an [unofficial fork](https://github.com/OnurGumus/Fable.Lit) of
 [Fable.Lit](https://github.com/fable-compiler/Fable.Lit), which was last released in
