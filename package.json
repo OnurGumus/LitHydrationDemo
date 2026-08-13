@@ -6,7 +6,7 @@
     "build:client": "dotnet fable Client -o Client/build && vite build",
     "start": "dotnet run --project Server",
     "predev": "npm install --no-audit --no-fund",
-    "dev": "concurrently -k -n client,server -c cyan,green \"dotnet fable watch Client -o Client/build-dev -c Debug --run vite\" \"nodemon --quiet --delay 3 --watch Shared --watch Server --ext fs,html --exec \\\"dotnet run --project Server -p:SkipClientBuild=true -- --hmr\\\"\""
+    "dev": "concurrently -k -n client,server -c cyan,green \"dotnet fable watch Client -o Client/build-dev -c Debug --run vite\" \"nodemon --quiet --delay 3 --signal SIGINT --watch Shared --watch Server --ext fs,html --exec \\\"dotnet build Server -p:SkipClientBuild=true --nologo -v q && exec dotnet Server/bin/Debug/net10.0/Demo.Server.dll --hmr\\\"\""
   },
   "dependencies": {
     "lit": "^3",

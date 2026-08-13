@@ -7,6 +7,7 @@ open System.Threading.Tasks
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.SpaServices
+open Microsoft.Extensions.Hosting
 open HtmlTypeProvider
 open Lit
 
@@ -65,6 +66,16 @@ let main args =
     let hotReload = args |> Array.contains "--hmr"
 
     let builder = WebApplication.CreateBuilder(args |> Array.filter (fun a -> a <> "--hmr"))
+
+    if hotReload then
+        // Leave immediately when asked to. The default is to wait up to five seconds for
+        // open connections to finish, and a browser keeps its connections open, so the
+        // restarter has already started the next server by the time this one lets go of
+        // the port -- which then fails to bind, exits, and is restarted, several times
+        // over, before one of them wins.
+        builder.Host.ConfigureHostOptions(fun options -> options.ShutdownTimeout <- TimeSpan.FromMilliseconds 200.0)
+        |> ignore
+
     let app = builder.Build()
 
     if hotReload then
