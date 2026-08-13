@@ -1,6 +1,7 @@
 /// Starts one Elmish program per component, each adopting the markup the server sent.
 module App
 
+open Browser
 open Elmish
 open Lit
 open Lit.Elmish
@@ -29,6 +30,22 @@ Program.mkProgram Views.Basket.init Views.Basket.update Views.Basket.view
 Program.mkProgram Views.Palette.init Views.Palette.update Views.Palette.view
 |> Program.withLitHydratedInShadowRoot "palette"
 |> Program.run
+
+// The host is a custom element as far as the browser is concerned -- any tag with a
+// dash is -- so it can be upgraded to one that reports joining and leaving the document.
+// That is the only such report the platform offers, and it is the same one LitElement
+// borrows for its own components.
+//
+// To watch it happen: open the console and remove the element,
+//
+//     document.querySelector("#panel").remove()
+//
+// then put it back with document.body.append(...) -- the messages are the browser's, not
+// a poll of ours. What lit rendered inside is paused and resumed along with them.
+Lit.trackConnection (
+    "bfb-panel",
+    fun _ connected -> console.log ("bfb-panel " + (if connected then "connected" else "disconnected"))
+)
 
 // The fourth mounts on the host, not on its shadow root: the shadow root here is a
 // static frame, and what needs driving is the light content the slots display.

@@ -170,6 +170,31 @@ host's children are the light content and nothing else, which is exactly what th
 were written around. The shadow root here has no bindings at all, so there is nothing in
 it to adopt.
 
+### Watching it connect and disconnect
+
+The host is a custom element as far as the browser is concerned — any tag with a dash is
+— so it can be upgraded to one that reports joining and leaving the document. `Client/App.fs`
+does that and logs it:
+
+```fsharp
+Lit.trackConnection ("bfb-panel", fun _ connected ->
+    console.log ("bfb-panel " + (if connected then "connected" else "disconnected")))
+```
+
+Open the console and take it out:
+
+```js
+const panel = document.querySelector('#panel'), parent = panel.parentNode
+panel.remove()                 // bfb-panel disconnected
+parent.appendChild(panel)      // bfb-panel connected
+```
+
+Those are the browser's own callbacks, not a poll — and they are the only such report the
+platform offers, which is why lit itself borrows them for its components. What lit rendered
+inside is paused and resumed along with them, so an element that was merely moved comes back
+with everything it had. Nothing else in the page has this: remove `#counter` and its program
+never hears about it, because a plain `<div>` has no callbacks to lend.
+
 ## Editing it while it runs
 
 ```bash
