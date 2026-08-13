@@ -9,7 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fable.Elmish" Version="5.0.2" />
-    <PackageReference Include="Lit.Server.Unofficial" Version="2.13.0" />
+    <PackageReference Include="Lit.Server.Unofficial" Version="2.14.0" />
     <PackageReference Include="HtmlTypeProvider" Version="0.9.1" />
     <!-- Dev only: proxies everything but the page itself to the Vite dev server. -->
     <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="10.0.11" />

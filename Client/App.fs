@@ -42,13 +42,21 @@ Program.mkProgram Views.Palette.init Views.Palette.update Views.Palette.view
 //
 // then put it back with document.body.append(...) -- the messages are the browser's, not
 // a poll of ours. What lit rendered inside is paused and resumed along with them.
-// Returns a disposable, so it fits where a hook wants one. Nothing here ever stops
-// listening, so it is ignored.
-Lit.trackConnection (
-    "bfb-panel",
-    fun _ connected -> console.log ("bfb-panel " + (if connected then "connected" else "disconnected"))
-)
-|> ignore
+// Shaped like an effect: what runs on arrival hands back what should be undone on
+// departure, so the two halves cannot drift apart. A timer or a socket would live here;
+// this only says so out loud.
+//
+// Held for as long as the page is. In a component this is what you would return from
+// Hook.useEffectOnce, so that leaving the page stops the listening as well.
+let private panelConnection =
+    Lit.trackConnection (
+        "bfb-panel",
+        fun _ ->
+            console.log "bfb-panel connected"
+
+            { new System.IDisposable with
+                member _.Dispose() = console.log "bfb-panel disconnected" }
+    )
 
 // The fourth mounts on the host, not on its shadow root: the shadow root here is a
 // static frame, and what needs driving is the light content the slots display.
