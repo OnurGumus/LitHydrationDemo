@@ -22,3 +22,10 @@ Program.mkProgram Views.Counter.init Views.Counter.update Views.Counter.view
 Program.mkProgram Views.Basket.init Views.Basket.update Views.Basket.view
 |> Program.withLitHydrated "basket"
 |> Program.run
+
+// The third mounts on the shadow root rather than on the element: the root is where the
+// server's markers are, and hydrating the host would leave lit hunting for a part that
+// is not in the tree it was given.
+Program.mkProgram Views.Palette.init Views.Palette.update Views.Palette.view
+|> Program.withLitHydratedInShadowRoot "palette"
+|> Program.run

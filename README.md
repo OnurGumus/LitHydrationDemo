@@ -1,4 +1,4 @@
-# F# hydration demo: two Elmish components, server-rendered
+# F# hydration demo: three Elmish components, server-rendered
 
 A small, self-contained example of writing components **once** in F# — model, update and
 view — rendering them to HTML with .NET, and having [lit](https://lit.dev) *adopt* that
@@ -15,10 +15,10 @@ time.
 
 ## What this shows
 
-The page arrives fully rendered from ASP.NET: a counter and a basket, each in its own
-container. When the script loads, each becomes an Elmish program that **adopts** its own
-markup — taking ownership of the existing DOM rather than replacing it. No element is
-re-created, no markup is rendered twice, and the two loops never touch each other.
+The page arrives fully rendered from ASP.NET: a counter, a basket, and a palette, each in
+its own container. When the script loads, each becomes an Elmish program that **adopts**
+its own markup — taking ownership of the existing DOM rather than replacing it. No element
+is re-created, no markup is rendered twice, and the loops never touch each other.
 
 `Shared/Views.fs` is compiled twice — by the .NET compiler against
 [`Lit.Server.Unofficial`](https://www.nuget.org/packages/Lit.Server.Unofficial), and by
@@ -51,10 +51,10 @@ the browser it becomes a real listener the moment lit adopts the markup.
 
 | | |
 |---|---|
-| `Shared/Views.fs` | both components: model, msg, init, update, view |
+| `Shared/Views.fs` | all three components: model, msg, init, update, view |
 | `Server/Program.fs` | minimal ASP.NET; renders each with `toHydratableNode` |
 | `Server/page.html` | the page shell, an `HtmlTypeProvider` template, one div per component |
-| `Client/App.fs` | two Elmish programs, six lines |
+| `Client/App.fs` | three Elmish programs, three lines each |
 
 The server composes the rendered view into the page as a `Node`, the type
 [`HtmlTypeProvider`](https://github.com/OnurGumus/HtmlTypeProvider) templates already
@@ -96,6 +96,37 @@ digest mismatch: caught, reported, and rendered normally. A different *model* hy
 cleanly and then shows values the server never sent, which nothing catches. Here both
 sides call the same `init`, so it holds by construction; an init that depends on server
 state has to be handed that state.
+
+## The third one is in a shadow root
+
+`Palette` is an ordinary Elmish component that happens to arrive inside its own shadow
+root, and it uses the same `.card` class as the two above. It looks different because the
+page's stylesheet does not reach into a shadow root and its own does not reach out.
+
+```fsharp
+// Server: styles and markup together, inside the template
+.Palette(toShadowRootNode Views.Palette.styles (Views.Palette.view palette ignore))
+```
+
+```fsharp
+// Client: the root is the container the markers were written into, not the host
+Program.mkProgram Views.Palette.init Views.Palette.update Views.Palette.view
+|> Program.withLitHydratedInShadowRoot "palette"
+|> Program.run
+```
+
+What the server writes is `<template shadowrootmode="open">`, which the HTML parser
+attaches as a shadow root while it reads the page — so the element has its shadow DOM,
+and its styles, before any script has run. Turn JavaScript off and it is still there.
+
+Nothing in the hydration protocol needed to change for this. lit finds its bindings by
+walking comment nodes, and comments live in a shadow root like anywhere else. The styles
+sit outside the markers, so they are neither adopted nor re-rendered.
+
+This is the islands version of declarative shadow DOM, and it is worth being clear about
+what it is not: rendering `LitElement` components on the server the way `@lit-labs/ssr`
+does — walking custom element tags, serialising `static styles`, ordering hydration with
+`defer-hydration` — is a much larger thing that `Lit.Server` does not attempt.
 
 ## Editing it while it runs
 

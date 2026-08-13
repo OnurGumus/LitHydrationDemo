@@ -102,11 +102,15 @@ let main args =
                 // model. Handlers are dropped on the server, hence `ignore` for dispatch.
                 let counter, _ = Views.Counter.init ()
                 let basket, _ = Views.Basket.init ()
+                let palette, _ = Views.Palette.init ()
 
                 let html =
                     Page()
                         .Counter(toHydratableNode (Views.Counter.view counter ignore))
                         .Basket(toHydratableNode (Views.Basket.view basket ignore))
+                        // Styles and markup together, inside the template the parser
+                        // turns into a shadow root.
+                        .Palette(toShadowRootNode Views.Palette.styles (Views.Palette.view palette ignore))
                         .Scripts(Node.RawHtml(scripts hotReload))
                         .Render()
 

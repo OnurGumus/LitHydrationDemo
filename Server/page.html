@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Two Elmish components, server-rendered</title>
+    <title>Three Elmish components, server-rendered</title>
     <style>
       body { font: 15px/1.5 system-ui; margin: 2rem; color: #16202c; }
       .card { border: 1px solid #d8dee6; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; max-width: 30rem; }
@@ -14,14 +14,22 @@
     </style>
   </head>
   <body>
-    <p class="note">Both cards below arrived as HTML from .NET. Each is an independent
-      Elmish program that <em>adopts</em> its own markup when the script loads: the nodes
-      stay, and the two loops never touch each other.</p>
+    <p class="note">All three cards below arrived as HTML from .NET. Each is an
+      independent Elmish program that <em>adopts</em> its own markup when the script
+      loads: the nodes stay, and the loops never touch each other. The third one arrived
+      inside a shadow root of its own, styles included, which is why the page's card
+      styling stops at its edge.</p>
 
     <!-- One container per component. Each is the element its own markers were written
          into, and each is hydrated separately. -->
     <div id="counter">${Counter}</div>
     <div id="basket">${Basket}</div>
+
+    <!-- The third one is a host, not a container: what goes in it is a
+         <template shadowrootmode="open">, which the parser attaches as a shadow root
+         while reading this page. Its markers are inside that root, so that is where the
+         client hydrates. -->
+    <div id="palette">${Palette}</div>
 
     ${Scripts}
   </body>
