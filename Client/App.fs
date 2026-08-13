@@ -29,3 +29,9 @@ Program.mkProgram Views.Basket.init Views.Basket.update Views.Basket.view
 Program.mkProgram Views.Palette.init Views.Palette.update Views.Palette.view
 |> Program.withLitHydratedInShadowRoot "palette"
 |> Program.run
+
+// The fourth mounts on the host, not on its shadow root: the shadow root here is a
+// static frame, and what needs driving is the light content the slots display.
+Program.mkProgram Views.Panel.init Views.Panel.update Views.Panel.view
+|> Program.withLitHydrated "panel"
+|> Program.run

@@ -118,3 +118,68 @@ module Palette =
                   <p>Picked: <b class="picked">{model.Picked}</b></p>
                   {Lit.ofList (choices |> List.map (choice dispatch model.Picked))}
                 </section>"""
+
+/// A fourth component, in two halves: a shadow root that is only a frame, and the
+/// content it frames, which stays in the light DOM.
+///
+/// The host arrives as
+///
+///     <bfb-panel id="panel">
+///       <template shadowrootmode="open"> ...frame with <slot>... </template>
+///       ...content...
+///     </bfb-panel>
+///
+/// and the parser does the composing: the template becomes the shadow root, the content
+/// stays where it is, and the slots pull it into place. All before any script runs.
+///
+/// The interesting part is which stylesheet reaches what. The frame is styled by the
+/// shadow root, which the page cannot touch; the content is light DOM, so the page's own
+/// `.card` rule styles it exactly as it styles the two cards above. One element, two
+/// rulebooks, and the boundary is the slot.
+module Panel =
+
+    type Model = { Step: int }
+
+    type Msg = Next
+
+    let steps = [ "measure"; "pack"; "ship" ]
+
+    let init () = { Step = 0 }, Cmd.none
+
+    let update msg model =
+        match msg with
+        | Next -> { model with Step = (model.Step + 1) % steps.Length }, Cmd.none
+
+    /// The shadow root: a frame with somewhere to put things. No bindings, so there is
+    /// nothing here to hydrate -- it is markup the parser attaches and never revisits.
+    let frame =
+        html
+            $"""<div class="frame">
+                  <header><slot name="title"></slot></header>
+                  <div class="body"><slot></slot></div>
+                </div>"""
+
+    let styles =
+        """
+        /* The host itself, from inside its own shadow root. Worth setting: an unknown
+           element is display:inline by default, so without this the frame sits on the
+           text baseline and ignores margins. */
+        :host { display: block; margin-bottom: 1rem; }
+        .frame { border: 1px solid #16202c; border-radius: 10px; padding: .25rem .5rem .5rem;
+                 max-width: 30rem; }
+        header { font: 600 13px/2 system-ui; letter-spacing: .08em; text-transform: uppercase;
+                 color: #5b6876; padding: 0 .5rem; }
+        /* Reaches through the boundary, but only this far: a slotted element can be
+           styled from in here, its children cannot. */
+        ::slotted(h2) { margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
+        """
+
+    /// The light content. Hydrated on the host itself, because that is where it lives:
+    /// the template element is gone by then, taken by the parser to build the shadow root.
+    let view model dispatch =
+        html
+            $"""<h2 slot="title">Panel</h2>
+                <section class="card">
+                  <p>Step <b class="step">{model.Step + 1}</b> of {steps.Length}: <b class="name">{steps.[model.Step]}</b></p>
+                  <button @click={Ev(fun _ -> dispatch Next)}>next</button>
+                </section>"""

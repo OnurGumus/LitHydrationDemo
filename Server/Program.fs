@@ -121,6 +121,7 @@ let main args =
                 let counter, _ = Views.Counter.init ()
                 let basket, _ = Views.Basket.init ()
                 let palette, _ = Views.Palette.init ()
+                let panel, _ = Views.Panel.init ()
 
                 let html =
                     Page()
@@ -129,6 +130,13 @@ let main args =
                         // Styles and markup together, inside the template the parser
                         // turns into a shadow root.
                         .Palette(toShadowRootNode Views.Palette.styles (Views.Palette.view palette ignore))
+                        // Two halves of one element: the shadow root the parser will
+                        // attach, then the content the slots pull into it.
+                        .Panel(
+                            Node.Fragment
+                                [ toShadowRootNode Views.Panel.styles Views.Panel.frame
+                                  toHydratableNode (Views.Panel.view panel ignore) ]
+                        )
                         .Scripts(Node.RawHtml(scripts hotReload))
                         .Render()
 

@@ -1,4 +1,4 @@
-# F# hydration demo: three Elmish components, server-rendered
+# F# hydration demo: four Elmish components, server-rendered
 
 A small, self-contained example of writing components **once** in F# — model, update and
 view — rendering them to HTML with .NET, and having [lit](https://lit.dev) *adopt* that
@@ -15,8 +15,8 @@ time.
 
 ## What this shows
 
-The page arrives fully rendered from ASP.NET: a counter, a basket, and a palette, each in
-its own container. When the script loads, each becomes an Elmish program that **adopts**
+The page arrives fully rendered from ASP.NET: a counter, a basket, a palette and a panel,
+each in its own container. When the script loads, each becomes an Elmish program that **adopts**
 its own markup — taking ownership of the existing DOM rather than replacing it. No element
 is re-created, no markup is rendered twice, and the loops never touch each other.
 
@@ -54,7 +54,7 @@ the browser it becomes a real listener the moment lit adopts the markup.
 | `Shared/Views.fs` | all three components: model, msg, init, update, view |
 | `Server/Program.fs` | minimal ASP.NET; renders each with `toHydratableNode` |
 | `Server/page.html` | the page shell, an `HtmlTypeProvider` template, one div per component |
-| `Client/App.fs` | three Elmish programs, three lines each |
+| `Client/App.fs` | four Elmish programs, three lines each |
 
 The server composes the rendered view into the page as a `Node`, the type
 [`HtmlTypeProvider`](https://github.com/OnurGumus/HtmlTypeProvider) templates already
@@ -127,6 +127,48 @@ This is the islands version of declarative shadow DOM, and it is worth being cle
 what it is not: rendering `LitElement` components on the server the way `@lit-labs/ssr`
 does — walking custom element tags, serialising `static styles`, ordering hydration with
 `defer-hydration` — is a much larger thing that `Lit.Server` does not attempt.
+
+## The fourth one uses slots
+
+`Palette` puts everything inside its shadow root. `Panel` does the opposite: its shadow
+root is only a frame, and the content it frames stays in the light DOM.
+
+```html
+<bfb-panel id="panel">
+  <template shadowrootmode="open">
+    <style>:host { display: block } .frame { ... }</style>
+    <div class="frame">
+      <header><slot name="title"></slot></header>
+      <div class="body"><slot></slot></div>
+    </div>
+  </template>
+
+  <h2 slot="title">Panel</h2>
+  <section class="card">...</section>
+</bfb-panel>
+```
+
+The parser does the composing: the template becomes the shadow root, everything after it
+stays where it is, and the slots pull it into place — before a line of script has run.
+
+The interesting part is which stylesheet reaches what. The frame is styled from inside
+the shadow root, where the page cannot reach it. The card is light DOM, so the page's own
+`.card` rule styles it exactly as it styles the two cards at the top. One element, two
+rulebooks, and the slot is the border between them. `::slotted(h2)` reaches across it,
+but only to the slotted element itself — not to anything inside it.
+
+Hydration happens on the **host**, not on the shadow root:
+
+```fsharp
+Program.mkProgram Views.Panel.init Views.Panel.update Views.Panel.view
+|> Program.withLitHydrated "panel"
+|> Program.run
+```
+
+By then the `<template>` is gone — the parser took it to build the shadow root — so the
+host's children are the light content and nothing else, which is exactly what the markers
+were written around. The shadow root here has no bindings at all, so there is nothing in
+it to adopt.
 
 ## Editing it while it runs
 

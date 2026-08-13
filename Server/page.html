@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>Three Elmish components, server-rendered</title>
+    <title>Four Elmish components, server-rendered</title>
     <style>
       body { font: 15px/1.5 system-ui; margin: 2rem; color: #16202c; }
       .card { border: 1px solid #d8dee6; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; max-width: 30rem; }
@@ -14,11 +14,13 @@
     </style>
   </head>
   <body>
-    <p class="note">All three cards below arrived as HTML from .NET. Each is an
+    <p class="note">All four cards below arrived as HTML from .NET. Each is an
       independent Elmish program that <em>adopts</em> its own markup when the script
-      loads: the nodes stay, and the loops never touch each other. The third one arrived
+      loads: the nodes stay, and the loops never touch each other. The third arrived
       inside a shadow root of its own, styles included, which is why the page's card
-      styling stops at its edge.</p>
+      styling stops at its edge. The fourth is the other way round: its shadow root is
+      only a frame with slots, and the card it frames is ordinary light DOM, styled by
+      this page like the two at the top.</p>
 
     <!-- One container per component. Each is the element its own markers were written
          into, and each is hydrated separately. -->
@@ -30,6 +32,12 @@
          while reading this page. Its markers are inside that root, so that is where the
          client hydrates. -->
     <div id="palette">${Palette}</div>
+
+    <!-- A host with both halves: the template becomes its shadow root, and everything
+         after it stays in the light DOM to be pulled into the slots. Hydration happens
+         on the host, because by then the template is gone and the light content is all
+         that is left of its children. -->
+    <bfb-panel id="panel">${Panel}</bfb-panel>
 
     ${Scripts}
   </body>
