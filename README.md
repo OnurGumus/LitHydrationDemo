@@ -148,6 +148,16 @@ origin and the markup names no second port. That is `UseSpa` with
 and unguarded it would answer for the page too, which would end the server rendering
 this demo is about.
 
+The usual way to do this is `UseReactDevelopmentServer`, which — despite the name — just
+means "run this npm script and wait for that port", and is what an ordinary app should
+reach for. It waits because it *starts* the dev server, and that is the part this demo
+cannot have. A shared view is compiled into the server as well, so editing one restarts
+the server, and a dev server the server owned would go down with it: Fable from cold on
+every edit, and a browser told its dev server has disappeared. So Vite runs alongside
+instead, and the proxy waits for it — through the same seam, the overload that takes a
+task rather than a URL, so the page still renders at once and it is the request for the
+*code* that waits.
+
 The state survives because `Program.withLitHydrated` records the running program on the
 element it renders into. A hot update re-runs the module, the module mounts again, and
 the second mount finds the first: it stops it, takes its model, and renders. One line

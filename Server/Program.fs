@@ -32,12 +32,20 @@ let private scripts hotReload =
     else
         """<script type="module" src="/app.js"></script>"""
 
-/// Waits for the dev server, once, before the first page is served.
+/// Waits for the dev server, once, and then hands the proxy its address.
 ///
-/// This page renders from .NET whether or not anything can serve its code, so a dev
-/// server that is still starting gives you a page that looks finished and does nothing
-/// when you press a button -- which is the one failure this demo should never
-/// demonstrate by accident. Waiting turns it into a slow first load.
+/// The waiting matters because this page renders from .NET whether or not anything can
+/// serve its code: reach it while Vite is still starting and you get a page that looks
+/// finished and does nothing when you press a button. Held here rather than in the page,
+/// so the markup still arrives immediately and it is the request for the code that waits.
+///
+/// ASP.NET has a way to do this without any of the below -- `UseReactDevelopmentServer`,
+/// which despite the name only means "run this npm script and wait for that port", and is
+/// what a normal app should use. It waits because it *starts* the dev server, and that is
+/// the part this demo cannot have: a shared view is compiled into the server too, so
+/// editing one restarts the server, and a dev server owned by the server would be
+/// restarted with it -- Fable from cold, and a browser told its dev server has gone.
+/// Here Vite is started alongside instead, and this waits for it.
 let private devServerReady =
     lazy
         (task {
@@ -57,6 +65,8 @@ let private devServerReady =
 
             if not ready then
                 Console.Error.WriteLine $"the dev server at {DevServer} never answered; the page will render but nothing will run"
+
+            return Uri DevServer
          })
 
 [<EntryPoint>]
@@ -98,7 +108,7 @@ let main args =
         // this demo exists to show.
         app.UseWhen(
             (fun ctx -> ctx.Request.Path <> PathString "/"),
-            fun branch -> branch.UseSpa(fun spa -> spa.UseProxyToSpaDevelopmentServer DevServer)
+            fun branch -> branch.UseSpa(fun spa -> spa.UseProxyToSpaDevelopmentServer(Func<Task<Uri>>(fun () -> devServerReady.Value)))
         )
         |> ignore
 
@@ -106,9 +116,6 @@ let main args =
         "/",
         Func<Task<IResult>>(fun () ->
             task {
-                if hotReload then
-                    do! devServerReady.Value
-
                 // The same init the browser will run, so both sides render the same
                 // model. Handlers are dropped on the server, hence `ignore` for dispatch.
                 let counter, _ = Views.Counter.init ()
