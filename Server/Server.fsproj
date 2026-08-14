@@ -44,9 +44,16 @@
   <!-- Nor under npm run dev, which passes SkipClientBuild: Fable and vite are already
        watching there, and building them again on every server restart would empty the
        directory the browser is fetching from. -->
+  <!-- Globbed rather than listed. A named list goes stale the first time a file is added
+       to the client and says nothing about it: the build succeeds, the bundle is last
+       week's, and the page in the browser is the one you are trying to change. -->
+  <ItemGroup>
+    <ClientSource Include="$(MSBuildProjectDirectory)/../Shared/*.fs;$(MSBuildProjectDirectory)/../Client/*.fs;$(MSBuildProjectDirectory)/../Client/Client.fsproj" />
+  </ItemGroup>
+
   <Target Name="BuildClient" BeforeTargets="BeforeBuild" DependsOnTargets="RestoreTools;EnsureNodeModules"
           Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipClientBuild)' != 'true'"
-          Inputs="$(MSBuildProjectDirectory)/../Shared/Views.fs;$(MSBuildProjectDirectory)/../Shared/Theme.fs;$(MSBuildProjectDirectory)/../Client/App.fs;$(MSBuildProjectDirectory)/../Client/Client.fsproj"
+          Inputs="@(ClientSource)"
           Outputs="$(MSBuildProjectDirectory)/wwwroot/app.js">
     <Message Importance="high" Text="Compiling and bundling the client..." />
     <Exec Command="dotnet fable Client -o Client/build" WorkingDirectory="$(MSBuildProjectDirectory)/.." />

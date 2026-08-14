@@ -32,6 +32,9 @@ let ThemeBadge () =
                            font: 15px/1.5 system-ui; color: var(--ink); }}
                   h2 {{ margin: 0 0 .5rem; font-size: 1.05rem; }}
                   code {{ background: var(--field); padding: .1rem .3rem; border-radius: 4px; }}
+                  button {{ font: inherit; padding: .25rem .7rem; color: inherit;
+                            background: var(--field); border: 1px solid var(--line);
+                            border-radius: 6px; }}
                   """ ])
     |> ignore
 
@@ -40,12 +43,26 @@ let ThemeBadge () =
     // answer -- no default to flash, no fetch to await.
     let theme = Hook.useStore ThemeStore.store
 
+    // Writing does not come from the hook, and does not need to. `dispatch` is the one
+    // `makeElmish` handed back next to the store, at module level, the same function for
+    // every caller -- so there is nothing about it that depends on this component and
+    // nothing for a hook to hold. Reading is per-component and subscribed; writing is a
+    // module you call.
+    //
+    // Note what does *not* happen here: no local state, no marking this component as the
+    // one that changed it. The message goes to the store, the store updates, and this
+    // component hears about it on the same subscription as everybody else.
     html
         $"""<section class="card">
               <h2>A component, not an island</h2>
               <p>The server sent an empty <code>&lt;bfb-theme-badge&gt;</code> and nothing
                  inside it. This is <b class="theme">{Theme.name theme}</b> because the
                  store already knew.</p>
+              <p>It can write to the store as well as read it, and the two islands above
+                 follow &mdash; the same way this one follows them.</p>
+              <button @click={Ev(fun _ -> ThemeStore.dispatch Theme.Toggle)}>
+                switch to {if theme.Dark then "light" else "dark"}
+              </button>
               <p>Remove it and put it back &mdash; <code>document.querySelector("bfb-theme-badge").remove()</code>
                  &mdash; and it unsubscribes and resubscribes on its own. That is what a
                  component gets for free and an island needs
