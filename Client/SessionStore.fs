@@ -62,6 +62,11 @@ let private update msg session = Session.update msg session, ElmishStore.Cmd.non
 
 /// The store is the loop: the same init and update any Elmish program takes, and back
 /// come the state to read and the dispatch to write with.
+///
+/// Note what is missing. `Program.mkProgram` takes init, update *and* view, and binds the
+/// three together; `makeElmish` takes init and update and knows nothing about rendering.
+/// A store has no view, is not told when something starts reading it, and does not count
+/// its readers -- which is exactly what lets two islands share this one.
 let private store, dispatch = Store.makeElmish init update ignore ()
 
 /// Renders `view` into the element with this id: it adopts the server's markup on the
