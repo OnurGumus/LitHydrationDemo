@@ -52,8 +52,8 @@ the browser it becomes a real listener the moment lit adopts the markup.
 | | |
 |---|---|
 | `Shared/Views.fs` | four components: model, msg, init, update, view |
-| `Shared/Session.fs` | the state two islands share, and the views onto it |
-| `Client/SessionStore.fs` | where the store's first value comes from, and the one write |
+| `Shared/Theme.fs` | the state two islands share, and the views onto it |
+| `Client/ThemeStore.fs` | the loop they share, and the one DOM read that starts it |
 | `Server/Program.fs` | minimal ASP.NET; renders each with `toHydratableNode` |
 | `Server/page.html` | the page shell, an `HtmlTypeProvider` template, one div per component |
 | `Client/App.fs` | four Elmish programs, three lines each |
@@ -203,62 +203,90 @@ Every component above starts from an `init` both sides can run, which is why non
 needs anything shipped alongside the markup: the server and the browser reach the same
 first model separately, and hydration matches by construction.
 
-The last two cannot. Which warehouse, how many bays, **and who is signed in** — the browser
-has no way to work that out, and *both* islands render from it, so both have to hear the
-same answer. The server builds it once, renders both views from it, and writes it into the
-page:
+The last two cannot. **Whether you asked for dark** is not something the browser can work
+out — it is a preference, held in a cookie, and *both* islands display it, so both have to
+start from the same answer.
+
+Getting it from the browser is the version everyone has seen: the page arrives in the
+wrong colours and corrects itself a moment later, in front of the reader. So the server
+reads the cookie before it writes anything, and the very first bytes are already right:
 
 ```html
-<script type="application/json" id="bfb-session">{"Warehouse":"Rotterdam","Bays":12,"Reserved":4,"SignedInAs":"pat"}</script>
+<html lang="en" data-theme="dark">
 ```
 
-The store reads that once, on the way up, and each island's `init` reads the store. So the
-model they start from is the model their markup was rendered from — which is the contract
-hydration rests on, and the reason nothing here is fetched after the fact.
+and further down, for the islands:
+
+```html
+<script type="application/json" id="bfb-theme">{"Dark":true}</script>
+```
+
+The store reads that once, on the way up, and both islands start from the store. So the
+model they begin with is the model their markup was rendered from — the contract hydration
+rests on, and the reason nothing here is fetched after the fact.
 
 These two do not have a loop each. They share one, and it lives in the store:
 
 ```fsharp
-let private init () = valueFromThePage (), Cmd.none
-let private update msg session = Session.update msg session, Cmd.none
+let private init () = fromPage () |> Option.defaultValue { Dark = false }, Cmd.none
+let private update msg model = Theme.update msg model, Cmd.none
 
-let private store, dispatch = Store.makeElmish init update ignore ()
+let store, dispatch = Store.makeElmish init update ignore ()
 ```
 
-`Session.update` is an ordinary Elmish update — `Msg`, model in, model out — sitting in
-the shared file next to the views, so the server compiles it too. What differs from the
-four components above is only that the loop is not attached to an element. Reserving a
-bay is `dispatch Reserve`, exactly as it would be inside a program.
+`Theme.update` is an ordinary Elmish update — `Msg`, model in, model out — sitting in the
+shared file next to the views, so the server compiles it too. What differs from the four
+components above is only that the loop is not attached to an element. Toggling is
+`dispatch Toggle`, exactly as it would be inside a program.
+
+Note what `makeElmish` does *not* take. `Program.mkProgram` takes init, update **and**
+view, and binds the three together; a store takes init and update and knows nothing about
+rendering. That is precisely what lets two islands share one — and why the store touches
+the DOM exactly once, to read the payload, and never again.
 
 An island is then a view and nothing else:
 
 ```fsharp
-SessionStore.mount "bays" Session.bays
-SessionStore.mount "summary" (fun session _ -> Session.summary session)
+mount "theme" Theme.switch
+mount "readout" (fun model _ -> Theme.readout model)
 ```
 
 `mount` lives in `App.fs`, next to where the other four islands are started, not in the
 store: it adopts the server's markup with the store's current value and re-renders on
-every change after that. The store itself touches nothing that renders — it is asked for
-its value and told when to change, and that is all it knows. Both start from the value the store read out of the page, which is the
-value their markup was rendered from, so both adopt rather than rebuild — and neither
-knows the other exists.
+every change after that. Neither island knows the other exists.
+
+What a theme actually has to *do* — paint the page, and remember the choice so the server
+can paint it next time — is neither island's business either, and is one more subscriber
+in the same file:
+
+```fsharp
+ThemeStore.store
+|> Store.subscribeImmediate (fun model ->
+    document.documentElement.setAttribute ("data-theme", Theme.name model)
+    document.cookie <- $"{Theme.Cookie}={Theme.name model}; path=/; max-age=31536000")
+```
+
+Click the switch and four things move together: the two islands, the `html` attribute, and
+the cookie. Reload and the server renders the new answer from that cookie, so the page is
+never briefly the wrong colour.
 
 The store is [`Fable.Store`](https://github.com/davedawkins/Fable.Store); its commands stay
 on the client, which is why the shared update returns a model and nothing else. A component
 rather than a view can skip the subscription entirely with `Hook.useStore` from
 `Fable.LitStore.Unofficial`.
 
-Signing in is the part worth watching, because it is *not* an island. The form posts,
-the server sets a cookie and redirects, and the page comes back rendered from the new
-answer — `SignedInAs` in the payload, the reserve button no longer refusing, the hint
-gone. No script is involved, so it works with JavaScript switched off, which is the
-honest test of whether a page is server-rendered or merely server-delivered.
+The palette is worth a look while you switch, because its styles are inside a shadow root
+where the page's rules cannot reach — and it changes colour anyway. Custom properties
+inherit straight *through* a shadow boundary even though ordinary rules do not, so a card
+that is sealed against the page's selectors still takes the page's palette.
 
-Note the type: `SignedInAs: string`, empty when nobody is, rather than an option. The
-payload crosses as JSON and comes back through `unbox`, and an option would arrive as
-null or a value — neither of which is what F# expects one to look like. The moment you
-want a real option here, you want a codec.
+With JavaScript switched off the page is still themed correctly, because the cookie was
+read by .NET; only the toggle stops working. That is the honest test of whether a page is
+server-rendered or merely server-delivered.
+
+Note the type: `Dark: bool` rather than `Light | Dark`. The payload crosses as JSON and
+comes back through `unbox`, and a union would arrive as neither of the shapes F# expects.
+The moment you want a real union here, you want a codec.
 
 Three details that are easy to get wrong:
 
@@ -266,13 +294,13 @@ Three details that are easy to get wrong:
 would be parsed as markup. `System.Text.Json` escapes `<` by default, which is what makes
 this safe; a serialiser configured for "relaxed" escaping would not be.
 
-**The cast.** `unbox` works here because the record is strings and numbers, whose field
-names survive JSON unchanged. A union or an option would need a real codec, written once
-and compiled by both sides — at which point you are choosing between conditional
-compilation and a serialiser that ships for both runtimes.
+**The cast.** `unbox` works here because the record is a bool, whose field name survives
+JSON unchanged. A union or an option would need a real codec, written once and compiled by
+both sides — at which point you are choosing between conditional compilation and a
+serialiser that ships for both runtimes.
 
-**Failing soft.** If the payload is missing or unreadable the store warns and starts from a
-default, and the islands then render over the server's markup instead of adopting it —
+**Failing soft.** If the payload is missing or unreadable the store warns and starts from
+light, and the islands then render over the server's markup instead of adopting it —
 a warning and a rebuild rather than a broken page.
 
 Only what the first render needs belongs in there. Everything else can be fetched once the

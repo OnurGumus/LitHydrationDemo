@@ -17,8 +17,7 @@ type Page = Template<"page.html">
 [<Literal>]
 let private DevServer = "http://localhost:5173"
 
-[<Literal>]
-let private SignedInCookie = "bfb-user"
+
 
 /// Where the page gets its code.
 ///
@@ -73,32 +72,25 @@ let private devServerReady =
             return Uri DevServer
          })
 
-/// What only the server knows.
+/// What only the server knows in time to be useful.
 ///
-/// The warehouse would come from a database; who is signed in comes from a cookie, which
-/// is the honest version of the same thing -- the browser has the cookie but not the
-/// authority to decide what it means, and no amount of client code can work out from
-/// nothing whether a request will be accepted.
-let private sessionFor (ctx: HttpContext) =
-    let signedInAs =
-        match ctx.Request.Cookies.TryGetValue SignedInCookie with
-        | true, name -> name
-        | _ -> ""
+/// The browser has the cookie, but not before the first byte of HTML has to be written --
+/// and that byte decides whether the page arrives in the right colours or corrects itself
+/// afterwards in front of the reader.
+let private themeFor (ctx: HttpContext) =
+    match ctx.Request.Cookies.TryGetValue Theme.Cookie with
+    | true, "dark" -> { Theme.Dark = true }
+    | _ -> { Theme.Dark = false }
 
-    { Session.Warehouse = "Rotterdam"
-      Session.Bays = 12
-      Session.Reserved = 4
-      Session.SignedInAs = signedInAs }
-
-/// The session as a script tag the client can read.
+/// The theme as a script tag the client can read.
 ///
 /// System.Text.Json escapes `<` by default, which is what makes this safe to put inside a
 /// script element: a payload containing "</script>" would otherwise end the element and
 /// the rest would be parsed as markup. The one place in this page where that matters.
-let private sessionPayload (session: Session.Session) =
+let private themePayload (model: Theme.Model) =
     Node.Fragment
-        [ Node.RawHtml $"""<script type="application/json" id="{Session.PayloadId}">"""
-          Node.RawHtml(JsonSerializer.Serialize session)
+        [ Node.RawHtml $"""<script type="application/json" id="{Theme.PayloadId}">"""
+          Node.RawHtml(JsonSerializer.Serialize model)
           Node.RawHtml "</script>" ]
 
 [<EntryPoint>]
@@ -147,32 +139,6 @@ let main args =
         )
         |> ignore
 
-    // Signing in is a form post and a redirect, so it works with scripting switched off.
-    // The page that comes back is rendered from the new cookie, which is the only place
-    // the answer exists.
-    app.MapPost(
-        "/login",
-        Func<HttpContext, Task<IResult>>(fun ctx ->
-            task {
-                let! form = ctx.Request.ReadFormAsync()
-                let name = string form.["name"]
-
-                if name <> "" then
-                    ctx.Response.Cookies.Append(SignedInCookie, name)
-
-                return Results.Redirect "/"
-            })
-    )
-    |> ignore
-
-    app.MapPost(
-        "/logout",
-        Func<HttpContext, IResult>(fun ctx ->
-            ctx.Response.Cookies.Delete SignedInCookie
-            Results.Redirect "/")
-    )
-    |> ignore
-
     app.MapGet(
         "/",
         Func<HttpContext, Task<IResult>>(fun ctx ->
@@ -188,7 +154,7 @@ let main args =
                 // rendering the same value is the whole reason it has to be written
                 // down: each one hydrates against markup made from it, so both have to
                 // start from the same answer, and only the server has it.
-                let session = sessionFor ctx
+                let theme = themeFor ctx
 
                 let html =
                     Page()
@@ -204,10 +170,13 @@ let main args =
                                 [ toShadowRootNode Views.Panel.styles Views.Panel.frame
                                   toHydratableNode (Views.Panel.view panel ignore) ]
                         )
-                        .Bays(toHydratableNode (Session.bays session ignore))
-                        .Summary(toHydratableNode (Session.summary session))
-                        .Account(toNode (Session.account session))
-                        .SessionPayload(sessionPayload session)
+                        .Theme(toHydratableNode (Theme.switch theme ignore))
+                        .Readout(toHydratableNode (Theme.readout theme))
+                        .ThemePayload(themePayload theme)
+                        // The attribute the stylesheet keys off, written before anything
+                        // is sent: this is the difference between a page that is dark and
+                        // a page that becomes dark.
+                        .ThemeAttribute(Theme.name theme)
                         .Scripts(Node.RawHtml(scripts hotReload))
                         .Render()
 

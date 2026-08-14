@@ -5,7 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Shared\Views.fs" Link="Views.fs" />
-    <Compile Include="..\Shared\Session.fs" Link="Session.fs" />
+    <Compile Include="..\Shared\Theme.fs" Link="Theme.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
@@ -46,7 +46,7 @@
        directory the browser is fetching from. -->
   <Target Name="BuildClient" BeforeTargets="BeforeBuild" DependsOnTargets="RestoreTools;EnsureNodeModules"
           Condition="'$(DesignTimeBuild)' != 'true' And '$(SkipClientBuild)' != 'true'"
-          Inputs="$(MSBuildProjectDirectory)/../Shared/Views.fs;$(MSBuildProjectDirectory)/../Shared/Session.fs;$(MSBuildProjectDirectory)/../Client/App.fs;$(MSBuildProjectDirectory)/../Client/Client.fsproj"
+          Inputs="$(MSBuildProjectDirectory)/../Shared/Views.fs;$(MSBuildProjectDirectory)/../Shared/Theme.fs;$(MSBuildProjectDirectory)/../Client/App.fs;$(MSBuildProjectDirectory)/../Client/Client.fsproj"
           Outputs="$(MSBuildProjectDirectory)/wwwroot/app.js">
     <Message Importance="high" Text="Compiling and bundling the client..." />
     <Exec Command="dotnet fable Client -o Client/build" WorkingDirectory="$(MSBuildProjectDirectory)/.." />

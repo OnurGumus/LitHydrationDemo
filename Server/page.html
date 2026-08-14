@@ -1,20 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${ThemeAttribute}">
   <head>
     <meta charset="utf-8">
     <title>Six Elmish components, server-rendered</title>
     <style>
-      .account { display: flex; gap: .75rem; align-items: baseline; margin-bottom: 1rem;
-                 font: 15px/1.5 system-ui; }
-      .account input { font: inherit; padding: .2rem .4rem; }
-      .hint { color: #5b6876; margin: .35rem 0 0; font-size: .9em; }
-      body { font: 15px/1.5 system-ui; margin: 2rem; color: #16202c; }
-      .card { border: 1px solid #d8dee6; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; max-width: 30rem; }
+      :root { --page: #ffffff; --ink: #16202c; --quiet: #5b6876; --line: #d8dee6;
+              --card: #ffffff; --field: #f4f6f8; }
+      [data-theme="dark"] { --page: #14181d; --ink: #e6e9ee; --quiet: #9aa6b2;
+                            --line: #2b323a; --card: #1a1f26; --field: #232a32; }
+      html { background: var(--page); }
+      body { font: 15px/1.5 system-ui; margin: 2rem; color: var(--ink); background: var(--page); }
+      .card { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; max-width: 30rem; }
       h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
       table { border-collapse: collapse; margin: .25rem 0 .75rem; }
-      td { border-bottom: 1px solid #eef1f5; padding: .3rem 1rem .3rem 0; }
-      button { font: inherit; padding: .25rem .7rem; }
-      .note { color: #5b6876; max-width: 30rem; }
+      td { border-bottom: 1px solid var(--line); padding: .3rem 1rem .3rem 0; }
+      button { font: inherit; padding: .25rem .7rem; color: inherit;
+               background: var(--field); border: 1px solid var(--line); border-radius: 6px; }
+      .note { color: var(--quiet); max-width: 30rem; }
     </style>
   </head>
   <body>
@@ -25,16 +27,15 @@
       styling stops at its edge. The fourth is the other way round: its shadow root is
       only a frame with slots, and the card it frames is ordinary light DOM, styled by
       this page like the two at the top. The last two share one piece of state that only
-      the server knows &mdash; which warehouse, and who is signed in &mdash; so it is
-      written into the page below them: both start from the value their markup was
-      rendered from, and neither knows about the other. Signing in is a form post and a
-      redirect, so it works with JavaScript switched off.</p>
+      the server knows in time to matter &mdash; whether you asked for dark &mdash; so it
+      is written into the page below them, and into the html element before any of this
+      was sent. Both islands start from the value their markup was rendered from, neither
+      knows about the other, and the page is never briefly the wrong colour.</p>
 
     <!-- One container per component. Each is the element its own markers were written
          into, and each is hydrated separately. -->
     <div id="counter">${Counter}</div>
     <div id="basket">${Basket}</div>
-    aa
 
     <!-- The third one is a host, not a container: what goes in it is a
          <template shadowrootmode="open">, which the parser attaches as a shadow root
@@ -50,14 +51,10 @@
 
     <!-- Two islands onto one piece of state. Neither can work it out for itself, so the
          server writes it down once, below, and both start from that. -->
-    <!-- Rendered, not hydrated: a form that posts needs no script, and this one still
-         works with JavaScript switched off. -->
-    ${Account}
+    <div id="theme">${Theme}</div>
+    <div id="readout">${Readout}</div>
 
-    <div id="bays">${Bays}</div>
-    <div id="summary">${Summary}</div>
-
-    ${SessionPayload}
+    ${ThemePayload}
 
     ${Scripts}
   </body>

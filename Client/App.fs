@@ -68,13 +68,12 @@ Program.mkProgram Views.Panel.init Views.Panel.update Views.Panel.view
 // The two islands that share a store.
 //
 // No program each: the loop is in the store, and these are views onto it. Attaching them
-// is done here rather than in the store, because a store has no view and should not know
-// that anything renders -- it is asked for its value and told when to change, and that is
-// all.
+// happens here rather than in the store, because a store has no view and should not know
+// that anything renders.
 //
 // Both start from the value the store read out of the page, which is the value their
 // markup was rendered from, so both adopt rather than rebuild.
-let private mount (id: string) (view: Session.Session -> (Session.Msg -> unit) -> TemplateResult) =
+let private mount (id: string) (view: Theme.Model -> (Theme.Msg -> unit) -> TemplateResult) =
     let el = document.getElementById id
 
     if isNull el then
@@ -83,10 +82,19 @@ let private mount (id: string) (view: Session.Session -> (Session.Msg -> unit) -
     // Subscribing hands back the current value and reports every later one to the
     // callback, so the first render is the adoption and the rest are ordinary renders.
     let current, _ =
-        SessionStore.store
-        |> Store.subscribeImmediate (fun session -> Lit.render el (view session SessionStore.dispatch))
+        ThemeStore.store
+        |> Store.subscribeImmediate (fun model -> Lit.render el (view model ThemeStore.dispatch))
 
-    Hydrate.adopt el (view current SessionStore.dispatch)
+    Hydrate.adopt el (view current ThemeStore.dispatch)
 
-mount "bays" Session.bays
-mount "summary" (fun session _ -> Session.summary session)
+mount "theme" Theme.switch
+mount "readout" (fun model _ -> Theme.readout model)
+
+// What a theme actually has to do, which is neither island's business and certainly not
+// the store's: paint the page, and remember the choice so the *server* can paint it next
+// time. A subscriber, in the file where this app touches the document.
+ThemeStore.store
+|> Store.subscribeImmediate (fun model ->
+    document.documentElement.setAttribute ("data-theme", Theme.name model)
+    document.cookie <- $"{Theme.Cookie}={Theme.name model}; path=/; max-age=31536000")
+|> ignore

@@ -28,7 +28,7 @@ module Counter =
     let view model dispatch =
         html
             $"""<section class="card">
-                  <h2>Counte</h2>
+                  <h2>Counter</h2>
                   <p>Value: <b class="value">{model.Count}</b></p>
                   <button @click={Ev(fun _ -> dispatch Decrement)}>&minus;</button>
                   <button @click={Ev(fun _ -> dispatch Increment)}>+</button>
@@ -98,12 +98,17 @@ module Palette =
     /// styled quite differently by the page.
     let styles =
         """
-        .card { border: 1px dashed #c3ccd6; border-radius: 10px; padding: 1rem 1.25rem;
-                max-width: 30rem; font: 15px/1.5 system-ui; color: #16202c; }
+        /* var(), not colours. A stylesheet in here cannot be reached by the page's
+           rules -- that is the point of a shadow root -- but custom properties inherit
+           straight through the boundary, so the page's palette still arrives and this
+           card follows the theme like everything else. */
+        .card { border: 1px dashed var(--line); border-radius: 10px; padding: 1rem 1.25rem;
+                max-width: 30rem; font: 15px/1.5 system-ui; color: var(--ink);
+                background: var(--card); }
         h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
-        button { font: inherit; padding: .25rem .7rem; margin-right: .35rem;
-                 border: 1px solid #d8dee6; background: #fff; border-radius: 6px; }
-        button.on { border-color: #16202c; }
+        button { font: inherit; padding: .25rem .7rem; margin-right: .35rem; color: inherit;
+                 border: 1px solid var(--line); background: var(--field); border-radius: 6px; }
+        button.on { border-color: var(--ink); }
         """
 
     let private choice dispatch picked name =
@@ -165,10 +170,12 @@ module Panel =
            element is display:inline by default, so without this the frame sits on the
            text baseline and ignores margins. */
         :host { display: block; margin-bottom: 1rem; }
-        .frame { border: 1px solid #16202c; border-radius: 10px; padding: .25rem .5rem .5rem;
+        /* Same trick as the palette: the frame is drawn from in here, in the page's
+           colours, because custom properties cross the boundary and rules do not. */
+        .frame { border: 1px solid var(--ink); border-radius: 10px; padding: .25rem .5rem .5rem;
                  max-width: 30rem; }
         header { font: 600 13px/2 system-ui; letter-spacing: .08em; text-transform: uppercase;
-                 color: #5b6876; padding: 0 .5rem; }
+                 color: var(--quiet); padding: 0 .5rem; }
         /* Reaches through the boundary, but only this far: a slotted element can be
            styled from in here, its children cannot. */
         ::slotted(h2) { margin: 0; font-size: inherit; font-weight: inherit; color: inherit; }
