@@ -1,12 +1,17 @@
 /// The store the two session islands share, and where it gets its first value.
 ///
 /// Client only. The server has no store: it has the session in hand, renders both views
-/// from it, and writes it into the page so that this can start from the same one. That
-/// is the whole contract -- if this started from anything else, the first render would
+/// from it, and writes it into the page so that this can start from the same one. That is
+/// the whole contract -- if this started from anything else, the first render would
 /// disagree with the markup it is adopting, and lit would notice.
+///
+/// The store itself is `Fable.Store`, which is thirty lines of observable this does not
+/// need to own. What is left here is the two things it cannot know: where the first value
+/// comes from, and what the one write means.
 module SessionStore
 
 open Browser
+open Fable
 open Fable.Core
 open Fable.Core.JsInterop
 open Session
@@ -30,32 +35,36 @@ let private fromPage () =
             console.warn ("the session payload could not be read; the islands will start empty", error)
             None
 
-let mutable private current =
-    fromPage ()
-    |> Option.defaultValue
-        { Warehouse = "unknown"
-          Bays = 1
-          Reserved = 0
-          SignedInAs = "" }
+let private store: IStore<Session> =
+    Store.make
+        (fun () ->
+            fromPage ()
+            |> Option.defaultValue
+                { Warehouse = "unknown"
+                  Bays = 1
+                  Reserved = 0
+                  SignedInAs = "" })
+        ignore
+        ()
 
-let private listeners = ResizeArray<Session -> unit>()
-
-let value () = current
+/// The value as it stands, for an island's `init`.
+///
+/// Through a subscription that is immediately dropped, because that is how this store
+/// reports a value: subscribing hands you the current one before anything changes.
+let value () =
+    let current, subscription = store |> Store.subscribeImmediate ignore
+    subscription.Dispose()
+    current
 
 /// Subscribe for as long as you need it. Returns what stops it, so an island that goes
 /// away does not leave a listener rendering into nothing.
 let subscribe (onChange: Session -> unit) =
-    listeners.Add onChange
-
-    { new System.IDisposable with
-        member _.Dispose() = listeners.Remove onChange |> ignore }
-
-let private publish () =
-    for listener in Seq.toArray listeners do
-        listener current
+    store |> Store.subscribeImmediate onChange |> snd
 
 /// The one writer. Both islands ask for this; neither owns the answer.
 let reserve () =
-    if free current > 0 then
-        current <- { current with Reserved = current.Reserved + 1 }
-        publish ()
+    store.Update(fun current ->
+        if free current > 0 && signedIn current then
+            { current with Reserved = current.Reserved + 1 }
+        else
+            current)

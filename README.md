@@ -53,7 +53,7 @@ the browser it becomes a real listener the moment lit adopts the markup.
 |---|---|
 | `Shared/Views.fs` | four components: model, msg, init, update, view |
 | `Shared/Session.fs` | the state two islands share, and the views onto it |
-| `Client/SessionStore.fs` | the store, and where it gets its first value |
+| `Client/SessionStore.fs` | where the store's first value comes from, and the one write |
 | `Server/Program.fs` | minimal ASP.NET; renders each with `toHydratableNode` |
 | `Server/page.html` | the page shell, an `HtmlTypeProvider` template, one div per component |
 | `Client/App.fs` | four Elmish programs, three lines each |
@@ -218,6 +218,13 @@ hydration rests on, and the reason nothing here is fetched after the fact.
 
 Reserving a bay goes to the store, not to a model. Both islands are subscribed, so both
 move, and neither knows the other exists.
+
+The store itself is [`Fable.Store`](https://github.com/davedawkins/Fable.Store) — an
+observable with an `Update`, which is not worth writing again. What is left in
+`SessionStore.fs` is the two things a general-purpose store cannot know: where the first
+value comes from, and what the one write means. Components rather than Elmish programs
+can skip even the subscription and use `Hook.useStore` from
+`Fable.LitStore.Unofficial`; these islands are Elmish, so they subscribe the Elmish way.
 
 Signing in is the part worth watching, because it is *not* an island. The form posts,
 the server sets a cookie and redirects, and the page comes back rendered from the new
