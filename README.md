@@ -219,11 +219,10 @@ hydration rests on, and the reason nothing here is fetched after the fact.
 These two do not have a loop each. They share one, and it lives in the store:
 
 ```fsharp
-let private store, dispatch =
-    Store.makeElmish
-        (fun () -> valueFromThePage (), Cmd.none)
-        (fun msg session -> Session.update msg session, Cmd.none)
-        ignore ()
+let private init () = valueFromThePage (), Cmd.none
+let private update msg session = Session.update msg session, Cmd.none
+
+let private store, dispatch = Store.makeElmish init update ignore ()
 ```
 
 `Session.update` is an ordinary Elmish update — `Msg`, model in, model out — sitting in

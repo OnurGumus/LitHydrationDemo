@@ -38,27 +38,31 @@ let private fromPage () =
             console.warn ("the session payload could not be read; the islands will start empty", error)
             None
 
-/// The store is the loop: `Store.makeElmish` takes the same init and update any Elmish
-/// program would, and hands back the state to read and the dispatch to write with.
-///
-/// Commands stay empty here. The store's `Cmd` is its own type and its own concern, and
-/// nothing in this demo has an effect to run; a real one would fetch, and would do it
-/// from this file rather than from the shared update.
-let private store, dispatch =
-    Store.makeElmish
-        (fun () ->
-            let start =
-                fromPage ()
-                |> Option.defaultValue
-                    { Warehouse = "unknown"
-                      Bays = 1
-                      Reserved = 0
-                      SignedInAs = "" }
+/// Where the first value comes from: the page if the server wrote one, and a stand-in if
+/// it did not, which leaves the islands rendering over the server's markup rather than
+/// adopting it -- a warning and a rebuild instead of a page that lies.
+let private init () =
+    let start =
+        fromPage ()
+        |> Option.defaultValue
+            { Warehouse = "unknown"
+              Bays = 1
+              Reserved = 0
+              SignedInAs = "" }
 
-            start, ElmishStore.Cmd.none)
-        (fun msg session -> Session.update msg session, ElmishStore.Cmd.none)
-        ignore
-        ()
+    start, ElmishStore.Cmd.none
+
+/// The shared update, with the store's own command type wrapped around it.
+///
+/// `Session.update` is the whole of the decision and lives in the shared file, because the
+/// server compiles that one. Commands stay here: the store's `Cmd` is its own type, and
+/// nothing in this demo has an effect to run. A real one would fetch, and would do it from
+/// this line rather than from the shared update.
+let private update msg session = Session.update msg session, ElmishStore.Cmd.none
+
+/// The store is the loop: the same init and update any Elmish program takes, and back
+/// come the state to read and the dispatch to write with.
+let private store, dispatch = Store.makeElmish init update ignore ()
 
 /// Mounts a view on the element with this id: it adopts the server's markup once, and
 /// renders again whenever the store changes.
