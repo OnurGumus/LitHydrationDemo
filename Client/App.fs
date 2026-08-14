@@ -66,33 +66,8 @@ Program.mkProgram Views.Panel.init Views.Panel.update Views.Panel.view
 
 // The two islands that share a store.
 //
-// Their init reads the store, and the store read what the server wrote into the page, so
-// the model they start from is the model the markup was rendered from. That is the whole
-// arrangement: nothing is fetched, nothing is guessed, and neither island has to know the
-// other exists.
-//
-// Each subscribes for as long as it is mounted. Reserving goes to the store rather than
-// to a model, so the answer arrives back at both of them the same way.
-module private Shared =
-    open Session
-
-    type Msg = Changed of Session
-
-    let private program (view: Session -> (unit -> unit) -> Lit.TemplateResult) id =
-        let init () = SessionStore.value (), Cmd.none
-
-        let update (Changed session) (_: Session) = session, Cmd.none
-
-        let subscribe _ : Sub<Msg> =
-            [ [ "session"; id ], (fun dispatch -> SessionStore.subscribe (Changed >> dispatch)) ]
-
-        Program.mkProgram init update (fun model _ -> view model SessionStore.reserve)
-        |> Program.withSubscription subscribe
-        |> Program.withLitHydrated id
-        |> Program.run
-
-    let start () =
-        program Session.bays "bays"
-        program (fun session _ -> Session.summary session) "summary"
-
-Shared.start ()
+// No program each: the loop is in the store, and these are views onto it. Both start
+// from the value the store read out of the page, which is the value their markup was
+// rendered from -- so both adopt rather than rebuild, and neither knows the other exists.
+SessionStore.mount "bays" Session.bays
+SessionStore.mount "summary" (fun session _ -> Session.summary session)

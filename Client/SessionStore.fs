@@ -1,19 +1,22 @@
-/// The store the two session islands share, and where it gets its first value.
+/// One Elmish loop, in a store, with two views onto it.
+///
+/// The other four components each own a loop: their own init, update and model, mounted
+/// with `Program.withLitHydrated`. These two share one, because they show the same facts
+/// and must agree about them — so the init and the update live here, once, and the
+/// islands are only views. `Session.update` is the same shape as any Elmish update; what
+/// differs is that the loop is not attached to an element.
 ///
 /// Client only. The server has no store: it has the session in hand, renders both views
-/// from it, and writes it into the page so that this can start from the same one. That is
-/// the whole contract -- if this started from anything else, the first render would
-/// disagree with the markup it is adopting, and lit would notice.
-///
-/// The store itself is `Fable.Store`, which is thirty lines of observable this does not
-/// need to own. What is left here is the two things it cannot know: where the first value
-/// comes from, and what the one write means.
+/// from it, and writes it into the page so this can start from the same one. If it
+/// started from anything else the first render would disagree with the markup it is
+/// adopting, and lit would notice.
 module SessionStore
 
 open Browser
 open Fable
 open Fable.Core
 open Fable.Core.JsInterop
+open Lit
 open Session
 
 [<Emit("JSON.parse($0)")>]
@@ -35,36 +38,43 @@ let private fromPage () =
             console.warn ("the session payload could not be read; the islands will start empty", error)
             None
 
-let private store: IStore<Session> =
-    Store.make
+/// The store is the loop: `Store.makeElmish` takes the same init and update any Elmish
+/// program would, and hands back the state to read and the dispatch to write with.
+///
+/// Commands stay empty here. The store's `Cmd` is its own type and its own concern, and
+/// nothing in this demo has an effect to run; a real one would fetch, and would do it
+/// from this file rather than from the shared update.
+let private store, dispatch =
+    Store.makeElmish
         (fun () ->
-            fromPage ()
-            |> Option.defaultValue
-                { Warehouse = "unknown"
-                  Bays = 1
-                  Reserved = 0
-                  SignedInAs = "" })
+            let start =
+                fromPage ()
+                |> Option.defaultValue
+                    { Warehouse = "unknown"
+                      Bays = 1
+                      Reserved = 0
+                      SignedInAs = "" }
+
+            start, ElmishStore.Cmd.none)
+        (fun msg session -> Session.update msg session, ElmishStore.Cmd.none)
         ignore
         ()
 
-/// The value as it stands, for an island's `init`.
+/// Mounts a view on the element with this id: it adopts the server's markup once, and
+/// renders again whenever the store changes.
 ///
-/// Through a subscription that is immediately dropped, because that is how this store
-/// reports a value: subscribing hands you the current one before anything changes.
-let value () =
-    let current, subscription = store |> Store.subscribeImmediate ignore
-    subscription.Dispose()
-    current
+/// No Elmish program per island, because there is nothing for one to own. The state is
+/// the store's, the update is the store's, and what is left is a function from the
+/// current value to a template.
+let mount (id: string) (view: Session -> (Msg -> unit) -> TemplateResult) =
+    let el = document.getElementById id
 
-/// Subscribe for as long as you need it. Returns what stops it, so an island that goes
-/// away does not leave a listener rendering into nothing.
-let subscribe (onChange: Session -> unit) =
-    store |> Store.subscribeImmediate onChange |> snd
+    if isNull el then
+        failwith $"Cannot find element with id {id}"
 
-/// The one writer. Both islands ask for this; neither owns the answer.
-let reserve () =
-    store.Update(fun current ->
-        if free current > 0 && signedIn current then
-            { current with Reserved = current.Reserved + 1 }
-        else
-            current)
+    // Subscribing reports the current value here and every later one to the callback, so
+    // the first render is the adoption and the rest are ordinary renders.
+    let current, _ =
+        store |> Store.subscribeImmediate (fun session -> Lit.render el (view session dispatch))
+
+    Hydrate.adopt el (view current dispatch)

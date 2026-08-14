@@ -216,15 +216,37 @@ The store reads that once, on the way up, and each island's `init` reads the sto
 model they start from is the model their markup was rendered from — which is the contract
 hydration rests on, and the reason nothing here is fetched after the fact.
 
-Reserving a bay goes to the store, not to a model. Both islands are subscribed, so both
-move, and neither knows the other exists.
+These two do not have a loop each. They share one, and it lives in the store:
 
-The store itself is [`Fable.Store`](https://github.com/davedawkins/Fable.Store) — an
-observable with an `Update`, which is not worth writing again. What is left in
-`SessionStore.fs` is the two things a general-purpose store cannot know: where the first
-value comes from, and what the one write means. Components rather than Elmish programs
-can skip even the subscription and use `Hook.useStore` from
-`Fable.LitStore.Unofficial`; these islands are Elmish, so they subscribe the Elmish way.
+```fsharp
+let private store, dispatch =
+    Store.makeElmish
+        (fun () -> valueFromThePage (), Cmd.none)
+        (fun msg session -> Session.update msg session, Cmd.none)
+        ignore ()
+```
+
+`Session.update` is an ordinary Elmish update — `Msg`, model in, model out — sitting in
+the shared file next to the views, so the server compiles it too. What differs from the
+four components above is only that the loop is not attached to an element. Reserving a
+bay is `dispatch Reserve`, exactly as it would be inside a program.
+
+An island is then a view and nothing else:
+
+```fsharp
+SessionStore.mount "bays" Session.bays
+SessionStore.mount "summary" (fun session _ -> Session.summary session)
+```
+
+`mount` adopts the server's markup with the store's current value and re-renders on every
+change after that. Both start from the value the store read out of the page, which is the
+value their markup was rendered from, so both adopt rather than rebuild — and neither
+knows the other exists.
+
+The store is [`Fable.Store`](https://github.com/davedawkins/Fable.Store); its commands stay
+on the client, which is why the shared update returns a model and nothing else. A component
+rather than a view can skip the subscription entirely with `Hook.useStore` from
+`Fable.LitStore.Unofficial`.
 
 Signing in is the part worth watching, because it is *not* an island. The form posts,
 the server sets a cookie and redirects, and the page comes back rendered from the new

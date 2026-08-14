@@ -31,9 +31,24 @@ let free (session: Session) = session.Bays - session.Reserved
 
 let signedIn (session: Session) = session.SignedInAs <> ""
 
+/// The loop, which lives in the store rather than in either island: one update, one
+/// dispatch, and two views that read the result. Written here because the server compiles
+/// this file too and renders from the same starting value -- but note that the store's
+/// own `Cmd` stays on the client, which is why this update returns a model and nothing
+/// else. Effects here would be the client's business.
+type Msg = Reserve
+
+let update msg session =
+    match msg with
+    | Reserve ->
+        if signedIn session && free session > 0 then
+            { session with Reserved = session.Reserved + 1 }
+        else
+            session
+
 /// One of the two views onto it. Reserving is not done here: the island says what
 /// happened, the store decides, and both islands hear about it.
-let bays (session: Session) (onReserve: unit -> unit) =
+let bays (session: Session) (dispatch: Msg -> unit) =
     // Signed out, the button is there and refuses -- the same state the server rendered,
     // rather than a button that appears a moment after the page does.
     let stopped = not (signedIn session) || free session = 0
@@ -51,7 +66,7 @@ let bays (session: Session) (onReserve: unit -> unit) =
               <h2>Bays</h2>
               <p><b class="reserved">{session.Reserved}</b> of <b class="total">{session.Bays}</b> reserved,
                  <b class="free">{free session}</b> free.</p>
-              <button ?disabled={stopped} @click={Ev(fun _ -> onReserve ())}>reserve one</button>
+              <button ?disabled={stopped} @click={Ev(fun _ -> dispatch Reserve)}>reserve one</button>
               {hint}
             </section>"""
 
