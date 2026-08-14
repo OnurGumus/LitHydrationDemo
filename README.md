@@ -237,8 +237,10 @@ SessionStore.mount "bays" Session.bays
 SessionStore.mount "summary" (fun session _ -> Session.summary session)
 ```
 
-`mount` adopts the server's markup with the store's current value and re-renders on every
-change after that. Both start from the value the store read out of the page, which is the
+`mount` lives in `App.fs`, next to where the other four islands are started, not in the
+store: it adopts the server's markup with the store's current value and re-renders on
+every change after that. The store itself touches nothing that renders — it is asked for
+its value and told when to change, and that is all it knows. Both start from the value the store read out of the page, which is the
 value their markup was rendered from, so both adopt rather than rebuild — and neither
 knows the other exists.
 

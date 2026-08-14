@@ -1,10 +1,14 @@
-/// One Elmish loop, in a store, with two views onto it.
+/// One Elmish loop, in a store, for two views that live elsewhere.
 ///
 /// The other four components each own a loop: their own init, update and model, mounted
 /// with `Program.withLitHydrated`. These two share one, because they show the same facts
 /// and must agree about them — so the init and the update live here, once, and the
 /// islands are only views. `Session.update` is the same shape as any Elmish update; what
 /// differs is that the loop is not attached to an element.
+///
+/// Nothing here renders. The state, the update and the first value are this file's; the
+/// attaching of views to elements is App.fs's, next to where the other four islands are
+/// started.
 ///
 /// Client only. The server has no store: it has the session in hand, renders both views
 /// from it, and writes it into the page so this can start from the same one. If it
@@ -16,7 +20,6 @@ open Browser
 open Fable
 open Fable.Core
 open Fable.Core.JsInterop
-open Lit
 open Session
 
 [<Emit("JSON.parse($0)")>]
@@ -67,27 +70,4 @@ let private update msg session = Session.update msg session, ElmishStore.Cmd.non
 /// three together; `makeElmish` takes init and update and knows nothing about rendering.
 /// A store has no view, is not told when something starts reading it, and does not count
 /// its readers -- which is exactly what lets two islands share this one.
-let private store, dispatch = Store.makeElmish init update ignore ()
-
-/// Renders `view` into the element with this id: it adopts the server's markup on the
-/// store's current value, and renders again on every change after that.
-///
-/// `view` is the Elmish view -- a function of the model and a dispatch, the same shape
-/// `Program.mkProgram` takes as its third argument. `Session.bays` and `Session.summary`
-/// are the two here.
-///
-/// There is no Elmish program per island because there would be nothing for one to own:
-/// the model is the store's and the update is the store's, so what is left of a program
-/// is its view.
-let mount (id: string) (view: Session -> (Msg -> unit) -> TemplateResult) =
-    let el = document.getElementById id
-
-    if isNull el then
-        failwith $"Cannot find element with id {id}"
-
-    // Subscribing reports the current value here and every later one to the callback, so
-    // the first render is the adoption and the rest are ordinary renders.
-    let current, _ =
-        store |> Store.subscribeImmediate (fun session -> Lit.render el (view session dispatch))
-
-    Hydrate.adopt el (view current dispatch)
+let store, dispatch = Store.makeElmish init update ignore ()

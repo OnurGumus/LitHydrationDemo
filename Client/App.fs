@@ -3,6 +3,7 @@ module App
 
 open Browser
 open Elmish
+open Fable
 open Lit
 open Lit.Elmish
 
@@ -66,8 +67,26 @@ Program.mkProgram Views.Panel.init Views.Panel.update Views.Panel.view
 
 // The two islands that share a store.
 //
-// No program each: the loop is in the store, and these are views onto it. Both start
-// from the value the store read out of the page, which is the value their markup was
-// rendered from -- so both adopt rather than rebuild, and neither knows the other exists.
-SessionStore.mount "bays" Session.bays
-SessionStore.mount "summary" (fun session _ -> Session.summary session)
+// No program each: the loop is in the store, and these are views onto it. Attaching them
+// is done here rather than in the store, because a store has no view and should not know
+// that anything renders -- it is asked for its value and told when to change, and that is
+// all.
+//
+// Both start from the value the store read out of the page, which is the value their
+// markup was rendered from, so both adopt rather than rebuild.
+let private mount (id: string) (view: Session.Session -> (Session.Msg -> unit) -> TemplateResult) =
+    let el = document.getElementById id
+
+    if isNull el then
+        failwith $"Cannot find element with id {id}"
+
+    // Subscribing hands back the current value and reports every later one to the
+    // callback, so the first render is the adoption and the rest are ordinary renders.
+    let current, _ =
+        SessionStore.store
+        |> Store.subscribeImmediate (fun session -> Lit.render el (view session SessionStore.dispatch))
+
+    Hydrate.adopt el (view current SessionStore.dispatch)
+
+mount "bays" Session.bays
+mount "summary" (fun session _ -> Session.summary session)
