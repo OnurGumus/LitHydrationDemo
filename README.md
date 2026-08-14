@@ -56,6 +56,7 @@ the browser it becomes a real listener the moment lit adopts the markup.
 | `Client/ThemeStore.fs` | the loop they share, and the one DOM read that starts it |
 | `Server/Program.fs` | minimal ASP.NET; renders each with `toHydratableNode` |
 | `Server/page.html` | the page shell, an `HtmlTypeProvider` template, one div per component |
+| `Client/ThemeBadge.fs` | the same state, read by a component instead of an island |
 | `Client/App.fs` | four Elmish programs, three lines each |
 
 The server composes the rendered view into the page as a `Node`, the type
@@ -279,6 +280,55 @@ The palette is worth a look while you switch, because its styles are inside a sh
 where the page's rules cannot reach — and it changes colour anyway. Custom properties
 inherit straight *through* a shadow boundary even though ordinary rules do not, so a card
 that is sealed against the page's selectors still takes the page's palette.
+
+## An island is not a component
+
+The seventh card is the odd one out, and it is there to mark where the island pattern
+stops. Everything above it is markup the server wrote and lit adopted, driven from
+`App.fs` by something set up from outside. This one the browser builds:
+
+```fsharp
+[<LitElement("bfb-theme-badge")>]
+let ThemeBadge () =
+    LitElement.init (fun config -> config.styles <- [ css $"..." ]) |> ignore
+    let theme = Hook.useStore ThemeStore.store
+    html $"""...{Theme.name theme}..."""
+```
+
+`Hook.useStore` comes from `Fable.LitStore.Unofficial` and is the whole integration. The
+server sent `<bfb-theme-badge></bfb-theme-badge>` and nothing inside it, so there is
+nothing to hydrate here -- and nothing to fetch either, because the store already held the
+answer before any element on the page was upgraded. The component's first render is the
+server's value.
+
+What it gets that an island does not is a lifecycle. Take it out of the document and put
+it back:
+
+```js
+const badge = document.querySelector("bfb-theme-badge")
+const next = badge.nextSibling
+badge.remove()                                // unsubscribes
+// ...toggle the theme while it is gone: it does not follow
+badge.parentNode.insertBefore(badge, next)    // resubscribes, showing what it missed
+```
+
+The two islands cannot do that. Their subscription is taken in `App.fs` and lives as long
+as the page, because a `<div>` has no callbacks to hang a teardown on -- which is what
+`Lit.trackConnection` exists to borrow, and what `bfb-panel` uses.
+
+Reconnection is easy to get wrong in a way nothing reports. `disconnectedCallback`
+disposes what `useEffectOnce` set up; if `connectedCallback` does not put it back, an
+element that was merely *moved* -- reordered by a drag, re-parented by a list re-render --
+comes back alive but deaf. Fable.Lit 2.18.0 is where that got fixed, along with the half
+of it inside `useStore`: resubscribing is not enough on its own, because
+`subscribeImmediate` reports the current value by returning it rather than by calling
+back, so a component that only resubscribed would listen correctly from then on while
+still showing what was true when it left.
+
+One thing to know about `Fable.Store` before a component is the only reader: a store
+disposes itself when its last subscriber leaves. Here the page-level subscriber in
+`App.fs` holds it, so the badge can come and go. A store read *only* by components will be
+torn down the moment the last one disconnects.
 
 With JavaScript switched off the page is still themed correctly, because the cookie was
 read by .NET; only the toggle stops working. That is the honest test of whether a page is

@@ -6,11 +6,13 @@
     <Compile Include="..\Shared\Views.fs" Link="Views.fs" />
     <Compile Include="..\Shared\Theme.fs" Link="Theme.fs" />
     <Compile Include="ThemeStore.fs" />
+    <Compile Include="ThemeBadge.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Fable.Lit.Elmish.Unofficial" Version="2.14.0" />
-    <PackageReference Include="Fable.Lit.Unofficial" Version="2.14.0" />
+    <PackageReference Include="Fable.Lit.Elmish.Unofficial" Version="2.18.0" />
+    <PackageReference Include="Fable.Lit.Unofficial" Version="2.18.0" />
+    <PackageReference Include="Fable.LitStore.Unofficial" Version="2.18.0" />
     <PackageReference Include="Fable.Store" Version="1.0.0-beta-005" />
   </ItemGroup>
 </Project>

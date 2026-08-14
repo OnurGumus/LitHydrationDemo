@@ -90,6 +90,11 @@ let private mount (id: string) (view: Theme.Model -> (Theme.Msg -> unit) -> Temp
 mount "theme-switch" Theme.switch
 mount "theme-reader" (fun model _ -> Theme.reader model)
 
+// And the same store read by something that is not an island at all. Defining the element
+// is the whole of it: the browser finds the tag the server sent, upgrades it, and the
+// component subscribes and unsubscribes with its own connection.
+ThemeBadge.register ()
+
 // What a theme actually has to do, which is neither island's business and certainly not
 // the store's: paint the page, and remember the choice so the *server* can paint it next
 // time. A subscriber, in the file where this app touches the document.
