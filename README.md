@@ -247,8 +247,8 @@ the DOM exactly once, to read the payload, and never again.
 An island is then a view and nothing else:
 
 ```fsharp
-mount "theme" Theme.switch
-mount "readout" (fun model _ -> Theme.readout model)
+mount "theme-switch" Theme.switch
+mount "theme-reader" (fun model _ -> Theme.reader model)
 ```
 
 `mount` lives in `App.fs`, next to where the other four islands are started, not in the

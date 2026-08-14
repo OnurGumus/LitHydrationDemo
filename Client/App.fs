@@ -87,8 +87,8 @@ let private mount (id: string) (view: Theme.Model -> (Theme.Msg -> unit) -> Temp
 
     Hydrate.adopt el (view current ThemeStore.dispatch)
 
-mount "theme" Theme.switch
-mount "readout" (fun model _ -> Theme.readout model)
+mount "theme-switch" Theme.switch
+mount "theme-reader" (fun model _ -> Theme.reader model)
 
 // What a theme actually has to do, which is neither island's business and certainly not
 // the store's: paint the page, and remember the choice so the *server* can paint it next

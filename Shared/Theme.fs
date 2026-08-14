@@ -30,7 +30,7 @@ let update msg model =
     match msg with
     | Toggle -> { model with Dark = not model.Dark }
 
-/// The island that changes it.
+/// The island with the button: the one that changes the theme.
 let switch (model: Model) (dispatch: Msg -> unit) =
     html
         $"""<section class="card">
@@ -41,12 +41,12 @@ let switch (model: Model) (dispatch: Msg -> unit) =
               </button>
             </section>"""
 
-/// The island that only reads it, somewhere else on the page. Nothing connects the two
-/// but the store.
-let readout (model: Model) =
+/// The island with no button, further down the page. It is never told that the other one
+/// was clicked -- it reads the same store, and that is the whole demonstration.
+let reader (model: Model) =
     html
         $"""<section class="card">
               <h2>Elsewhere on the page</h2>
               <p>This card was not told about the switch. It reads the same store, so it
-                 says <b class="echo">{name model}</b> too.</p>
+                 says <b class="theme">{name model}</b> too.</p>
             </section>"""

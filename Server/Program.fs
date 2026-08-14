@@ -170,8 +170,8 @@ let main args =
                                 [ toShadowRootNode Views.Panel.styles Views.Panel.frame
                                   toHydratableNode (Views.Panel.view panel ignore) ]
                         )
-                        .Theme(toHydratableNode (Theme.switch theme ignore))
-                        .Readout(toHydratableNode (Theme.readout theme))
+                        .ThemeSwitch(toHydratableNode (Theme.switch theme ignore))
+                        .ThemeReader(toHydratableNode (Theme.reader theme))
                         .ThemePayload(themePayload theme)
                         // The attribute the stylesheet keys off, written before anything
                         // is sent: this is the difference between a page that is dark and
