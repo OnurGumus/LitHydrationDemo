@@ -64,12 +64,16 @@ let private update msg session = Session.update msg session, ElmishStore.Cmd.non
 /// come the state to read and the dispatch to write with.
 let private store, dispatch = Store.makeElmish init update ignore ()
 
-/// Mounts a view on the element with this id: it adopts the server's markup once, and
-/// renders again whenever the store changes.
+/// Renders `view` into the element with this id: it adopts the server's markup on the
+/// store's current value, and renders again on every change after that.
 ///
-/// No Elmish program per island, because there is nothing for one to own. The state is
-/// the store's, the update is the store's, and what is left is a function from the
-/// current value to a template.
+/// `view` is the Elmish view -- a function of the model and a dispatch, the same shape
+/// `Program.mkProgram` takes as its third argument. `Session.bays` and `Session.summary`
+/// are the two here.
+///
+/// There is no Elmish program per island because there would be nothing for one to own:
+/// the model is the store's and the update is the store's, so what is left of a program
+/// is its view.
 let mount (id: string) (view: Session -> (Msg -> unit) -> TemplateResult) =
     let el = document.getElementById id
 
