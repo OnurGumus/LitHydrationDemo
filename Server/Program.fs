@@ -17,6 +17,9 @@ type Page = Template<"page.html">
 [<Literal>]
 let private DevServer = "http://localhost:5173"
 
+[<Literal>]
+let private SignedInCookie = "bfb-user"
+
 /// Where the page gets its code.
 ///
 /// Both paths name the same origin. In production that is the bundle in wwwroot; under
@@ -70,12 +73,22 @@ let private devServerReady =
             return Uri DevServer
          })
 
-/// What only the server knows. A database would answer this; here it is a constant, and
-/// the point is the same either way: the browser cannot work it out, so it has to be told.
-let private sessionFor (_request: HttpRequest) =
+/// What only the server knows.
+///
+/// The warehouse would come from a database; who is signed in comes from a cookie, which
+/// is the honest version of the same thing -- the browser has the cookie but not the
+/// authority to decide what it means, and no amount of client code can work out from
+/// nothing whether a request will be accepted.
+let private sessionFor (ctx: HttpContext) =
+    let signedInAs =
+        match ctx.Request.Cookies.TryGetValue SignedInCookie with
+        | true, name -> name
+        | _ -> ""
+
     { Session.Warehouse = "Rotterdam"
       Session.Bays = 12
-      Session.Reserved = 4 }
+      Session.Reserved = 4
+      Session.SignedInAs = signedInAs }
 
 /// The session as a script tag the client can read.
 ///
@@ -126,14 +139,43 @@ let main args =
         // would come from Vite rather than from here, with none of the server rendering
         // this demo exists to show.
         app.UseWhen(
-            (fun ctx -> ctx.Request.Path <> PathString "/"),
+            // Anything routing has already matched is the app's own -- the page, and the
+            // two form posts. Asking the endpoint rather than the path means a route
+            // added later is covered without anyone remembering to come back here.
+            (fun ctx -> isNull (ctx.GetEndpoint())),
             fun branch -> branch.UseSpa(fun spa -> spa.UseProxyToSpaDevelopmentServer(Func<Task<Uri>>(fun () -> devServerReady.Value)))
         )
         |> ignore
 
+    // Signing in is a form post and a redirect, so it works with scripting switched off.
+    // The page that comes back is rendered from the new cookie, which is the only place
+    // the answer exists.
+    app.MapPost(
+        "/login",
+        Func<HttpContext, Task<IResult>>(fun ctx ->
+            task {
+                let! form = ctx.Request.ReadFormAsync()
+                let name = string form.["name"]
+
+                if name <> "" then
+                    ctx.Response.Cookies.Append(SignedInCookie, name)
+
+                return Results.Redirect "/"
+            })
+    )
+    |> ignore
+
+    app.MapPost(
+        "/logout",
+        Func<HttpContext, IResult>(fun ctx ->
+            ctx.Response.Cookies.Delete SignedInCookie
+            Results.Redirect "/")
+    )
+    |> ignore
+
     app.MapGet(
         "/",
-        Func<Task<IResult>>(fun () ->
+        Func<HttpContext, Task<IResult>>(fun ctx ->
             task {
                 // The same init the browser will run, so both sides render the same
                 // model. Handlers are dropped on the server, hence `ignore` for dispatch.
@@ -146,7 +188,7 @@ let main args =
                 // rendering the same value is the whole reason it has to be written
                 // down: each one hydrates against markup made from it, so both have to
                 // start from the same answer, and only the server has it.
-                let session = sessionFor null
+                let session = sessionFor ctx
 
                 let html =
                     Page()
@@ -164,6 +206,7 @@ let main args =
                         )
                         .Bays(toHydratableNode (Session.bays session ignore))
                         .Summary(toHydratableNode (Session.summary session))
+                        .Account(toNode (Session.account session))
                         .SessionPayload(sessionPayload session)
                         .Scripts(Node.RawHtml(scripts hotReload))
                         .Render()

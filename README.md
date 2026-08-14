@@ -203,12 +203,13 @@ Every component above starts from an `init` both sides can run, which is why non
 needs anything shipped alongside the markup: the server and the browser reach the same
 first model separately, and hydration matches by construction.
 
-The last two cannot. Which warehouse, how many bays — the browser has no way to work that
-out, and *both* islands render from it, so both have to hear the same answer. The server
-builds it once, renders both views from it, and writes it into the page:
+The last two cannot. Which warehouse, how many bays, **and who is signed in** — the browser
+has no way to work that out, and *both* islands render from it, so both have to hear the
+same answer. The server builds it once, renders both views from it, and writes it into the
+page:
 
 ```html
-<script type="application/json" id="bfb-session">{"Warehouse":"Rotterdam","Bays":12,"Reserved":4}</script>
+<script type="application/json" id="bfb-session">{"Warehouse":"Rotterdam","Bays":12,"Reserved":4,"SignedInAs":"pat"}</script>
 ```
 
 The store reads that once, on the way up, and each island's `init` reads the store. So the
@@ -217,6 +218,17 @@ hydration rests on, and the reason nothing here is fetched after the fact.
 
 Reserving a bay goes to the store, not to a model. Both islands are subscribed, so both
 move, and neither knows the other exists.
+
+Signing in is the part worth watching, because it is *not* an island. The form posts,
+the server sets a cookie and redirects, and the page comes back rendered from the new
+answer — `SignedInAs` in the payload, the reserve button no longer refusing, the hint
+gone. No script is involved, so it works with JavaScript switched off, which is the
+honest test of whether a page is server-rendered or merely server-delivered.
+
+Note the type: `SignedInAs: string`, empty when nobody is, rather than an option. The
+payload crosses as JSON and comes back through `unbox`, and an option would arrive as
+null or a value — neither of which is what F# expects one to look like. The moment you
+want a real option here, you want a codec.
 
 Three details that are easy to get wrong:
 

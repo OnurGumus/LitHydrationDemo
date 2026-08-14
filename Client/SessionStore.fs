@@ -35,7 +35,8 @@ let mutable private current =
     |> Option.defaultValue
         { Warehouse = "unknown"
           Bays = 1
-          Reserved = 0 }
+          Reserved = 0
+          SignedInAs = "" }
 
 let private listeners = ResizeArray<Session -> unit>()
 

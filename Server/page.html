@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <title>Six Elmish components, server-rendered</title>
     <style>
+      .account { display: flex; gap: .75rem; align-items: baseline; margin-bottom: 1rem;
+                 font: 15px/1.5 system-ui; }
+      .account input { font: inherit; padding: .2rem .4rem; }
+      .hint { color: #5b6876; margin: .35rem 0 0; font-size: .9em; }
       body { font: 15px/1.5 system-ui; margin: 2rem; color: #16202c; }
       .card { border: 1px solid #d8dee6; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; max-width: 30rem; }
       h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
@@ -21,9 +25,10 @@
       styling stops at its edge. The fourth is the other way round: its shadow root is
       only a frame with slots, and the card it frames is ordinary light DOM, styled by
       this page like the two at the top. The last two share one piece of state that only
-      the server knows, which is why it is written into the page below them: both start
-      from the value their markup was rendered from, and neither knows about the
-      other.</p>
+      the server knows &mdash; which warehouse, and who is signed in &mdash; so it is
+      written into the page below them: both start from the value their markup was
+      rendered from, and neither knows about the other. Signing in is a form post and a
+      redirect, so it works with JavaScript switched off.</p>
 
     <!-- One container per component. Each is the element its own markers were written
          into, and each is hydrated separately. -->
@@ -45,6 +50,10 @@
 
     <!-- Two islands onto one piece of state. Neither can work it out for itself, so the
          server writes it down once, below, and both start from that. -->
+    <!-- Rendered, not hydrated: a form that posts needs no script, and this one still
+         works with JavaScript switched off. -->
+    ${Account}
+
     <div id="bays">${Bays}</div>
     <div id="summary">${Summary}</div>
 

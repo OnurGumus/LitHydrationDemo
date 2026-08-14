@@ -17,7 +17,11 @@ open Lit
 type Session =
     { Warehouse: string
       Bays: int
-      Reserved: int }
+      Reserved: int
+      /// Empty when nobody is signed in. A string rather than an option, because this
+      /// record crosses as JSON and comes back through `unbox`: an option would arrive
+      /// as null or a value and neither is what F# expects an option to look like.
+      SignedInAs: string }
 
 /// Where the server leaves it and the client looks for it.
 [<Literal>]
@@ -25,15 +29,30 @@ let PayloadId = "bfb-session"
 
 let free (session: Session) = session.Bays - session.Reserved
 
+let signedIn (session: Session) = session.SignedInAs <> ""
+
 /// One of the two views onto it. Reserving is not done here: the island says what
 /// happened, the store decides, and both islands hear about it.
 let bays (session: Session) (onReserve: unit -> unit) =
+    // Signed out, the button is there and refuses -- the same state the server rendered,
+    // rather than a button that appears a moment after the page does.
+    let stopped = not (signedIn session) || free session = 0
+
+    // Bound above rather than inline: a triple-quoted string cannot appear inside an
+    // interpolation hole of another one.
+    let hint =
+        if signedIn session then
+            Lit.nothing
+        else
+            html $"""<p class="hint">Sign in to reserve.</p>"""
+
     html
         $"""<section class="card">
               <h2>Bays</h2>
               <p><b class="reserved">{session.Reserved}</b> of <b class="total">{session.Bays}</b> reserved,
                  <b class="free">{free session}</b> free.</p>
-              <button ?disabled={free session = 0} @click={Ev(fun _ -> onReserve ())}>reserve one</button>
+              <button ?disabled={stopped} @click={Ev(fun _ -> onReserve ())}>reserve one</button>
+              {hint}
             </section>"""
 
 /// The other, showing the same numbers from somewhere else on the page. Nothing here
@@ -44,3 +63,20 @@ let summary (session: Session) =
               <h2>Summary</h2>
               <p>{session.Warehouse} is <b class="usage">{session.Reserved * 100 / session.Bays}%%</b> reserved.</p>
             </section>"""
+
+/// Not an island: a form the server renders and the browser posts. It works with
+/// JavaScript switched off, which is the point -- signing in is a navigation, not a
+/// state change some script has to be present to make.
+let account (session: Session) =
+    if signedIn session then
+        html
+            $"""<form method="post" action="/logout" class="account">
+                  <span>Signed in as <b class="who">{session.SignedInAs}</b></span>
+                  <button type="submit">sign out</button>
+                </form>"""
+    else
+        html
+            $"""<form method="post" action="/login" class="account">
+                  <label>Name <input name="name" value="pat" required></label>
+                  <button type="submit">sign in</button>
+                </form>"""
