@@ -17,18 +17,21 @@ HMR.acceptSelf()
 
 // Two independent loops on one page. Neither knows about the other; each adopts the
 // container its own markers were written into, and renders normally from then on.
-Program.mkProgram Views.Counter.init Views.Counter.update Views.Counter.view
+Program.mkProgram Views.Counter.init Views.Counter.update (fun model dispatch ->
+    Views.Counter.view model (ViewTransitions.dispatch "counter" dispatch))
 |> Program.withLitHydrated "counter"
 |> Program.run
 
-Program.mkProgram Views.Basket.init Views.Basket.update Views.Basket.view
+Program.mkProgram Views.Basket.init Views.Basket.update (fun model dispatch ->
+    Views.Basket.view model (ViewTransitions.dispatch "basket" dispatch))
 |> Program.withLitHydrated "basket"
 |> Program.run
 
 // The third mounts on the shadow root rather than on the element: the root is where the
 // server's markers are, and hydrating the host would leave lit hunting for a part that
 // is not in the tree it was given.
-Program.mkProgram Views.Palette.init Views.Palette.update Views.Palette.view
+Program.mkProgram Views.Palette.init Views.Palette.update (fun model dispatch ->
+    Views.Palette.view model (ViewTransitions.dispatch "palette" dispatch))
 |> Program.withLitHydratedInShadowRoot "palette"
 |> Program.run
 
@@ -61,7 +64,8 @@ let private panelConnection =
 
 // The fourth mounts on the host, not on its shadow root: the shadow root here is a
 // static frame, and what needs driving is the light content the slots display.
-Program.mkProgram Views.Panel.init Views.Panel.update Views.Panel.view
+Program.mkProgram Views.Panel.init Views.Panel.update (fun model dispatch ->
+    Views.Panel.view model (ViewTransitions.dispatch "panel" dispatch))
 |> Program.withLitHydrated "panel"
 |> Program.run
 
@@ -81,11 +85,12 @@ let private mount (id: string) (view: Theme.Model -> (Theme.Msg -> unit) -> Temp
 
     // Subscribing hands back the current value and reports every later one to the
     // callback, so the first render is the adoption and the rest are ordinary renders.
+    let dispatch = ViewTransitions.dispatch "theme" ThemeStore.dispatch
     let current, _ =
         ThemeStore.store
-        |> Store.subscribeImmediate (fun model -> Lit.render el (view model ThemeStore.dispatch))
+        |> Store.subscribeImmediate (fun model -> Lit.render el (view model dispatch))
 
-    Hydrate.adopt el (view current ThemeStore.dispatch)
+    Hydrate.adopt el (view current dispatch)
 
 mount "theme-switch" Theme.switch
 mount "theme-reader" (fun model _ -> Theme.reader model)

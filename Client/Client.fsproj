@@ -6,6 +6,7 @@
     <Compile Include="..\Shared\Views.fs" Link="Views.fs" />
     <Compile Include="..\Shared\Theme.fs" Link="Theme.fs" />
     <Compile Include="ThemeStore.fs" />
+    <Compile Include="ViewTransitions.fs" />
     <Compile Include="ThemeBadge.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>

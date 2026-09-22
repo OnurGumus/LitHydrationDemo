@@ -2,7 +2,9 @@
 <html lang="en" data-theme="${ThemeAttribute}">
   <head>
     <meta charset="utf-8">
-    <title>Six Elmish components, server-rendered</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fable.Lit · Hydration + View Transitions</title>
+    <meta name="description" content="F# on the server and in the browser: Lit hydration, Elmish islands, shadow DOM, shared state, and native View Transitions. Try the live demo and explore the source.">
     <style>
       :root { --page: #ffffff; --ink: #16202c; --quiet: #5b6876; --line: #d8dee6;
               --card: #ffffff; --field: #f4f6f8; }
@@ -17,9 +19,47 @@
       button { font: inherit; padding: .25rem .7rem; color: inherit;
                background: var(--field); border: 1px solid var(--line); border-radius: 6px; }
       .note { color: var(--quiet); max-width: 30rem; }
+      h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); letter-spacing: -.04em; margin: .25rem 0; }
+      .intro { max-width: 52rem; margin-bottom: 1.5rem; }
+      .intro p { max-width: 42rem; color: var(--quiet); }
+      .eyebrow { font-size: .75rem; letter-spacing: .12em; text-transform: uppercase; }
+      details { margin-bottom: 1.5rem; }
+      summary { cursor: pointer; }
+      button { cursor: pointer; }
+      button:hover { border-color: var(--ink); }
+      button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+      a { color: inherit; text-underline-offset: .2em; }
+
+      /* Names are enabled only for the interaction being animated. Theme changes
+         use the single root snapshot, including all shadow-root contents. */
+      html[data-transition="basket"] #basket tr { view-transition-name: var(--row-transition); }
+      html[data-transition="basket"] #basket { view-transition-name: basket; }
+      html[data-transition="counter"] #counter .value { display: inline-block; view-transition-name: count; }
+      html[data-transition="palette"] #palette { view-transition-name: palette; }
+      html[data-transition="panel"] #panel { view-transition-name: panel; }
+      ::view-transition-group(*) { animation-duration: 450ms; animation-timing-function: ease-in-out; }
+      html[data-transition="theme"]::view-transition-old(root) { animation: 600ms ease both theme-out; }
+      html[data-transition="theme"]::view-transition-new(root) { animation: 600ms ease both theme-in; }
+      @keyframes theme-out { to { opacity: 0; } }
+      @keyframes theme-in { from { opacity: 0; } }
+      @media (prefers-reduced-motion: reduce) {
+        ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+      }
     </style>
   </head>
   <body>
+    <header class="intro">
+      <p class="eyebrow">Fable.Lit / browser-native animation</p>
+      <h1>Hydrated. Then animated.</h1>
+      <p><a href="https://github.com/OnurGumus/LitHydrationDemo">View the source on GitHub ↗</a></p>
+      <p>Switch the theme for a page-wide crossfade. Remove a basket item to see rows
+        glide into place, then reset to replay. Try the counter, palette and panel too.</p>
+      <p>Animations follow your reduced-motion preference. Browsers without View
+        Transitions still update normally.</p>
+    </header>
+    <div id="theme-switch">${ThemeSwitch}</div>
+    <details>
+    <summary>How the hydration demo works</summary>
     <p class="note">The six cards below arrived as HTML from .NET. Each is an
       independent Elmish program that <em>adopts</em> its own markup when the script
       loads: the nodes stay, and the loops never touch each other. The third arrived
@@ -33,6 +73,7 @@
       knows about the other, and the page is never briefly the wrong colour. A seventh card
       arrived empty, because it is not an island at all: it is a custom element, the
       browser builds it, and it reads that same state from the store.</p>
+    </details>
 
     <!-- One container per component. Each is the element its own markers were written
          into, and each is hydrated separately. -->
@@ -53,7 +94,6 @@
 
     <!-- Two islands onto one piece of state. Neither can work it out for itself, so the
          server writes it down once, below, and both start from that. -->
-    <div id="theme-switch">${ThemeSwitch}</div>
     <div id="theme-reader">${ThemeReader}</div>
 
     <!-- Empty on purpose: the server renders nothing into this one. It is a custom

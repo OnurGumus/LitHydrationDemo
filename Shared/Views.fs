@@ -41,7 +41,7 @@ module Basket =
 
     type Model = { Items: Item list }
 
-    type Msg = Remove of string
+    type Msg = Remove of string | Reset
 
     let init () =
         { Items =
@@ -54,10 +54,11 @@ module Basket =
         match msg with
         | Remove name ->
             { model with Items = model.Items |> List.filter (fun i -> i.Name <> name) }, Cmd.none
+        | Reset -> init ()
 
     let private row dispatch (item: Item) =
         html
-            $"""<tr>
+            $"""<tr style={"--row-transition: basket-" + item.Name.ToLowerInvariant()}>
                   <td>{item.Name}</td>
                   <td>{item.Qty}</td>
                   <td><button @click={Ev(fun _ -> dispatch (Remove item.Name))}>remove</button></td>
@@ -69,8 +70,10 @@ module Basket =
         html
             $"""<section class="card">
                   <h2>Basket</h2>
+                  <p>Remove a row and watch the others move into place.</p>
                   <table><tbody>{Lit.ofList (model.Items |> List.map (row dispatch))}</tbody></table>
                   <p>Total: <b class="total">{total}</b> in <b class="lines">{model.Items.Length}</b> lines.</p>
+                  <button @click={Ev(fun _ -> dispatch Reset)}>reset basket</button>
                 </section>"""
 
 /// A third component, which arrives inside a shadow root of its own.

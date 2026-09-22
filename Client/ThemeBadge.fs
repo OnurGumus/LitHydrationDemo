@@ -60,7 +60,7 @@ let ThemeBadge () =
                  store already knew.</p>
               <p>It can write to the store as well as read it, and the two islands above
                  follow &mdash; the same way this one follows them.</p>
-              <button @click={Ev(fun _ -> ThemeStore.dispatch Theme.Toggle)}>
+              <button @click={Ev(fun _ -> ViewTransitions.dispatch "theme" ThemeStore.dispatch Theme.Toggle)}>
                 switch to {if theme.Dark then "light" else "dark"}
               </button>
               <p>Remove it and put it back &mdash; <code>document.querySelector("bfb-theme-badge").remove()</code>

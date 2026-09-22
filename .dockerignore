@@ -1,0 +1,10 @@
+.git
+.agents
+.codex
+**/bin
+**/obj
+node_modules
+Client/build
+Client/build-dev
+Server/wwwroot
+**/.DS_Store

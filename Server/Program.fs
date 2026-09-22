@@ -188,5 +188,12 @@ let main args =
     )
     |> ignore
 
-    app.Run("http://localhost:5199")
+    app.MapGet("/healthz", Func<IResult>(fun () -> Results.Ok "healthy")) |> ignore
+
+    // Keep the zero-config local URL, but honor container/hosting configuration.
+    if String.IsNullOrWhiteSpace builder.Configuration.["urls"]
+       && String.IsNullOrWhiteSpace builder.Configuration.["HTTP_PORTS"] then
+        app.Urls.Add "http://localhost:5199"
+
+    app.Run()
     0

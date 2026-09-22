@@ -1,4 +1,10 @@
-# F# hydration demo: six Elmish components, server-rendered
+# Fable.Lit: server hydration + View Transitions
+
+**[Try the live demo →](https://litdemo.novian.works)**
+
+Server-rendered F# components that adopt their HTML, share reactive state across islands,
+and animate with the browser's View Transition API. Toggle the theme, remove a basket
+row, or interact with the shadow-root components.
 
 A small, self-contained example of writing components **once** in F# — model, update and
 view — rendering them to HTML with .NET, and having [lit](https://lit.dev) *adopt* that
@@ -13,7 +19,54 @@ Then open <http://localhost:5199>. That is the whole setup: the server project c
 and bundles the client on its way to building, and installs the npm packages the first
 time.
 
+## Hosting the live demo
+
+The Docker image builds the client and publishes ASP.NET with .NET 10; Node is used
+only during the build. The runtime runs as a non-root user on port 8080.
+
+```bash
+docker build -t litdemo .
+docker run --rm -p 8080:8080 litdemo
+```
+
+For the existing Kubernetes cluster, `./builddocker.sh` builds and pushes a unique
+`linux/amd64` image to `docker.3dpack.ing/litdemo`, validates and applies
+`kubernetes-deployment.yaml`, and waits for the rollout. It explicitly targets context
+`microk8s-low` (override with `KUBE_CONTEXT`). It requires Docker registry credentials,
+kubectl access, the existing `regcred2` pull secret, nginx ingress, and the
+`letsencrypt` ClusterIssuer. No database or persistent volume is needed.
+
+DNS: point the `litdemo.novian.works` A record at `157.180.8.180`. Cert-manager issues
+the HTTPS certificate once the hostname reaches the ingress. `/healthz` serves the
+readiness and liveness probes.
+
+To inspect or roll back a deployment:
+
+```bash
+kubectl --context microk8s-low -n default get pods,ingress,certificate -l app=litdemo
+kubectl --context microk8s-low -n default rollout undo deployment/litdemo
+```
+
 ## What this shows
+
+### View Transitions
+
+Open the demo and switch the theme for a whole-page crossfade, including the shadow
+roots and the store-backed badge. Remove basket rows to animate their disappearance
+and the remaining rows' movement; **reset basket** lets you replay it. Counter,
+palette and panel interactions also transition.
+
+`Client/ViewTransitions.fs` wraps user dispatches in `document.startViewTransition`.
+Initial adoption is unchanged. Its callback waits for the badge's `updateComplete`,
+so the new snapshot includes both synchronous island renders and the asynchronous
+LitElement render. A shared queue keeps rapid interactions in order across islands.
+Reduced-motion preferences and browsers without the API get ordinary updates.
+
+The CSS in `Server/page.html` enables stable basket row names only during basket
+transitions; theme transitions capture the whole page as one image. The shared views
+remain compilable on .NET: all browser interop is in the client project.
+
+### Hydration
 
 The page arrives fully rendered from ASP.NET: a counter, a basket, a palette, a panel, and
 two islands that share one piece of state, each in its own container. When the script loads, each becomes an Elmish program that **adopts**
