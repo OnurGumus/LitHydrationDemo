@@ -8,3 +8,4 @@ Client/build
 Client/build-dev
 Server/wwwroot
 **/.DS_Store
+docs
