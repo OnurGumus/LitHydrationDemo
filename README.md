@@ -3,16 +3,7 @@
 **[Try the live demo →](https://litdemo.novian.works)**
 
 
-https://github.com/user-attachments/assets/674bfe51-df70-4100-aedb-a63fc9e609a1
-
-
-
-
-
-
-
-
-
+https://github.com/user-attachments/assets/58971b1d-48a0-4a2a-9371-1a89bdc73131
 
 
 A small demo of server-side rendering in F# with [Fable](https://fable.io) and
