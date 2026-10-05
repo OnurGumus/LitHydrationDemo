@@ -29,21 +29,6 @@ docker build -t litdemo .
 docker run --rm -p 8080:8080 litdemo
 ```
 
-`kubernetes-deployment.yaml` and `./builddocker.sh` deploy the same image to Kubernetes:
-the script builds and pushes a uniquely tagged `linux/amd64` image, validates and applies
-the manifest, and waits for the rollout. Both are written for the cluster behind the live
-demo, so change the image registry, pull secret, ingress host and kubectl context to your
-own before using them. The manifest expects an nginx ingress controller and a
-cert-manager ClusterIssuer for the HTTPS certificate. `/healthz` serves the readiness
-and liveness probes. No database or persistent volume is needed.
-
-To inspect or roll back a deployment:
-
-```bash
-kubectl get pods,ingress,certificate -l app=litdemo
-kubectl rollout undo deployment/litdemo
-```
-
 ## What this shows
 
 ### View Transitions
