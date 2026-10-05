@@ -2,10 +2,18 @@
 
 **[Try the live demo →](https://litdemo.novian.works)**
 
-[![Watch the 5-minute video tour](docs/hydration-tour-poster.png)](docs/hydration-tour.mp4)
 
-**[Watch the 5-minute video tour](docs/hydration-tour.mp4)**: hydration, shadow DOM, the
-shared theme store and View Transitions, walked through with the real code.
+https://github.com/user-attachments/assets/674bfe51-df70-4100-aedb-a63fc9e609a1
+
+
+
+
+
+
+
+
+
+
 
 A small demo of server-side rendering in F# with [Fable](https://fable.io) and
 [lit](https://lit.dev). In short:
