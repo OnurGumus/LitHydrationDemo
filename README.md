@@ -2,69 +2,74 @@
 
 **[Try the live demo →](https://litdemo.novian.works)**
 
-Server-rendered F# components that adopt their HTML, share reactive state across islands,
-and animate with the browser's View Transition API. Toggle the theme, remove a basket
-row, or interact with the shadow-root components.
+A small demo of server-side rendering in F# with [Fable](https://fable.io) and
+[lit](https://lit.dev). In short:
 
-A small, self-contained example of writing components **once** in F# — model, update and
-view — rendering them to HTML with .NET, and having [lit](https://lit.dev) *adopt* that
-HTML in the browser, where each becomes an independent Elmish program. No Node on the
-server, and no `@lit-labs/ssr`.
+1. You write each component **once** in F#, in the Elmish style (model, update, view).
+2. ASP.NET renders it to HTML, so the page is complete before any JavaScript runs.
+3. In the browser, lit **hydrates** that HTML: it keeps the DOM the server sent and
+   attaches event handlers and state to it, instead of building the page a second time.
+4. After that, every update is animated with the browser's View Transition API.
+
+There is no Node on the server and no `@lit-labs/ssr`. Node is only used to bundle the
+client at build time.
+
+## Run it
+
+You need the .NET 10 SDK and Node.js.
 
 ```bash
 dotnet run --project Server
 ```
 
-Then open <http://localhost:5199>. That is the whole setup: the server project compiles
-and bundles the client on its way to building, and installs the npm packages the first
-time.
+Then open <http://localhost:5199>. That is the whole setup: building the server also
+installs the npm packages (the first time) and compiles and bundles the client.
 
-## Hosting the live demo
+To work on it with hot reload, see [Editing it while it runs](#editing-it-while-it-runs).
 
-The Docker image builds the client and publishes ASP.NET with .NET 10; Node is used
-only during the build. The runtime runs as a non-root user on port 8080.
+## Words used in this README
 
-```bash
-docker build -t litdemo .
-docker run --rm -p 8080:8080 litdemo
-```
+| Term | Meaning here |
+|---|---|
+| **Hydrate / adopt** | The browser script takes over HTML the server already rendered, rather than replacing it. |
+| **Island** | One interactive region of the page: a container element whose content the server rendered and one piece of client code drives. |
+| **Elmish program** | A model, an `update` function and a `view` function, running as a loop. Counter, Basket, Palette and Panel are each one. |
+| **Store** | An Elmish loop that is not tied to any element, so several islands can read the same state. |
+| **Shadow root** | A sealed part of the DOM with its own styles. Page styles do not reach in and its styles do not leak out. |
+| **Light DOM** | The ordinary DOM, outside any shadow root. |
 
-## What this shows
+## What is on the page
 
-### View Transitions
+Seven cards, each showing one more thing:
 
-Open the demo and switch the theme for a whole-page crossfade, including the shadow
-roots and the store-backed badge. Remove basket rows to animate their disappearance
-and the remaining rows' movement; **reset basket** lets you replay it. Counter,
-palette and panel interactions also transition.
+| Card | What it demonstrates |
+|---|---|
+| **Theme switch** | State that only the server knows in time (a cookie), shared between islands through a store. |
+| **Counter** | The basic case: a server-rendered component that an Elmish program adopts. |
+| **Basket** | A second, fully independent program on the same page. |
+| **Palette** | The same thing inside a shadow root. |
+| **Panel** | A shadow root used only as a frame, with the content slotted in from the light DOM. |
+| **Theme reader** | A second island reading the same store as the theme switch. |
+| **Theme badge** | A real lit component (not an island), built in the browser, reading that store too. |
 
-`Client/ViewTransitions.fs` wraps user dispatches in `document.startViewTransition`.
-Initial adoption is unchanged. Its callback waits for the badge's `updateComplete`,
-so the new snapshot includes both synchronous island renders and the asynchronous
-LitElement render. A shared queue keeps rapid interactions in order across islands.
-Reduced-motion preferences and browsers without the API get ordinary updates.
+The first six arrive as HTML from .NET. The badge arrives as an empty tag on purpose.
 
-The CSS in `Server/page.html` enables stable basket row names only during basket
-transitions; theme transitions capture the whole page as one image. The shared views
-remain compilable on .NET: all browser interop is in the client project.
+## How hydration works
 
-### Hydration
+### One view, compiled twice
 
-The page arrives fully rendered from ASP.NET: a counter, a basket, a palette, a panel, and
-two islands that share one piece of state, each in its own container. When the script loads, each becomes an Elmish program that **adopts**
-its own markup — taking ownership of the existing DOM rather than replacing it. No element
-is re-created, no markup is rendered twice, and the loops never touch each other.
+`Shared/Views.fs` holds the components. It is compiled by two compilers:
 
-`Shared/Views.fs` is compiled twice — by the .NET compiler against
-[`Lit.Server.Unofficial`](https://www.nuget.org/packages/Lit.Server.Unofficial), and by
-[Fable](https://fable.io) against
-[`Fable.Lit.Unofficial`](https://www.nuget.org/packages/Fable.Lit.Unofficial). Both
-resolve `open Lit`; a project references one or the other, never both. So there is no
-conditional compilation, and no template written twice in two languages.
+- by .NET, against [`Lit.Server.Unofficial`](https://www.nuget.org/packages/Lit.Server.Unofficial), to render HTML on the server;
+- by Fable, against [`Fable.Lit.Unofficial`](https://www.nuget.org/packages/Fable.Lit.Unofficial), to run in the browser.
 
-Elmish itself is ordinary F# with no browser in it, so `init` and `update` compile on
-both sides too. That is what lets the server render from the model the browser is about
-to start with, without shipping it as JSON:
+Both packages provide the same `Lit` namespace, and a project references one or the
+other, never both. So there is no `#if` in the views, and no template written twice in
+two languages.
+
+Elmish is plain F# with no browser code in it, so `init` and `update` compile on both
+sides as well. This matters: the server can call the same `init` the browser will call,
+and render from the same starting model. Nothing has to be sent as JSON.
 
 ```fsharp
 // Server: run the same init the browser will
@@ -79,33 +84,38 @@ Program.mkProgram Views.Counter.init Views.Counter.update Views.Counter.view
 |> Program.run
 ```
 
-On the server `@click` is dropped — a handler is a closure and cannot be serialised. In
-the browser it becomes a real listener the moment lit adopts the markup.
+Event handlers such as `@click` are dropped on the server, because a function cannot be
+written into HTML. They become real listeners when lit adopts the markup in the browser.
 
-## Layout
+When the script loads, each program takes ownership of its own container. No element is
+re-created, nothing is rendered twice, and the programs never touch each other's DOM.
 
-| | |
+### Where things are
+
+| File | What is in it |
 |---|---|
-| `Shared/Views.fs` | four components: model, msg, init, update, view |
-| `Shared/Theme.fs` | the state two islands share, and the views onto it |
-| `Client/ThemeStore.fs` | the loop they share, and the one DOM read that starts it |
-| `Server/Program.fs` | minimal ASP.NET; renders each with `toHydratableNode` |
-| `Server/page.html` | the page shell, an `HtmlTypeProvider` template, one div per component |
-| `Client/ThemeBadge.fs` | the same state, read by a component instead of an island |
-| `Client/App.fs` | four Elmish programs, three lines each |
+| `Shared/Views.fs` | The four Elmish components: Counter, Basket, Palette, Panel |
+| `Shared/Theme.fs` | The theme state, its `update`, and the two views that show it |
+| `Client/App.fs` | Starts everything in the browser: one program per component |
+| `Client/ThemeStore.fs` | The shared theme store, and the one DOM read that starts it |
+| `Client/ThemeBadge.fs` | The lit component that reads the store |
+| `Client/ViewTransitions.fs` | Wraps updates in a view transition |
+| `Server/Program.fs` | Minimal ASP.NET app; renders each component with `toHydratableNode` |
+| `Server/page.html` | The page shell: an `HtmlTypeProvider` template with one container per component |
 
-The server composes the rendered view into the page as a `Node`, the type
+The server inserts each rendered view into the page as a `Node`, the type
 [`HtmlTypeProvider`](https://github.com/OnurGumus/HtmlTypeProvider) templates already
-accept, so no strings cross the boundary and nothing is escaped twice.
+accept. No HTML strings are passed around, so nothing is escaped twice.
 
-## Checking that it really hydrated
+### Checking that it really hydrated
 
-Adoption is invisible from the outside: markup that was re-rendered looks the same as
-markup that was kept. Two ways to be sure.
+You cannot see hydration by looking: markup that was thrown away and rebuilt looks the
+same as markup that was kept. Two ways to be sure:
 
-Turn JavaScript off and reload — the table is still there, because .NET rendered it.
+**Turn JavaScript off and reload.** The basket table is still there, because .NET
+rendered it.
 
-Or hold on to a node and watch it survive an update:
+**Hold on to a DOM node and check it survives.** In the browser console:
 
 ```js
 const card = document.querySelector('#basket section')
@@ -115,31 +125,40 @@ document.querySelector('#basket tbody tr button').click()          // remove a r
 document.querySelector('#counter .value').textContent              // unchanged
 ```
 
-The counter's `<section>` and the basket's are each the same DOM object before and after
-both interactions: two loops, patching their own DOM, ignoring each other's.
+The counter's `<section>` and the basket's are the same DOM objects before and after:
+two programs, each patching its own DOM and ignoring the other's.
 
-A console warning beginning `lit could not adopt` means it fell back to a full render.
-That is `Hydrate.adopt` doing its job: lit's `hydrate` throws part way through when the
-markup does not match, so the alternative to catching it is a half-wired page.
+If you see a console warning that starts with `lit could not adopt`, hydration failed
+and the component was rendered from scratch instead. That fallback is deliberate. lit's
+`hydrate` throws part way through when the markup does not match, so without
+`Hydrate.adopt` catching it you would get a half-working page.
 
-## Two rules worth knowing
+### Two rules to remember
 
-**Hydrate the element the markers were written into.** The root marker wraps whatever the
-template rendered, so here they are `<div id="counter">` and `<div id="basket">`, not the
-cards inside them. Hydrating a card places lit inside its own marker, where it never
-finds it.
+**Hydrate the element the server rendered into.** The server wraps what it renders in
+marker comments, and lit looks for them inside the element you give it. Here that means
+`<div id="counter">` and `<div id="basket">`, not the cards inside them. If you hydrate
+the card, lit starts inside its own marker and never finds it.
 
-**The client must start from the model the server rendered.** A different template is a
-digest mismatch: caught, reported, and rendered normally. A different *model* hydrates
-cleanly and then shows values the server never sent, which nothing catches. Here both
-sides call the same `init`, so it holds by construction; an init that depends on server
-state has to be handed that state.
+**The client must start from the same model the server rendered.** There are two ways
+to break this, and only one is caught:
 
-## The third one is in a shadow root
+- A different *template* is detected, reported in the console, and rendered normally.
+- A different *model* hydrates without complaint and then shows values the server never
+  sent. Nothing catches this.
 
-`Palette` is an ordinary Elmish component that happens to arrive inside its own shadow
-root, and it uses the same `.card` class as the two above. It looks different because the
-page's stylesheet does not reach into a shadow root and its own does not reach out.
+Here both sides call the same `init`, so the models always match. If your `init` depends
+on server state, you have to send that state to the browser (see
+[When the state comes from the server](#when-the-state-comes-from-the-server)).
+
+## Shadow DOM
+
+### Palette: a component inside a shadow root
+
+`Palette` is an ordinary Elmish component. The only difference is that the server
+delivers it inside a shadow root. It uses the same `.card` class as Counter and Basket
+but looks different, because the page's stylesheet does not reach into a shadow root and
+its own stylesheet does not reach out.
 
 ```fsharp
 // Server: styles and markup together, inside the template
@@ -147,29 +166,29 @@ page's stylesheet does not reach into a shadow root and its own does not reach o
 ```
 
 ```fsharp
-// Client: the root is the container the markers were written into, not the host
+// Client: hydrate inside the shadow root, where the markers are
 Program.mkProgram Views.Palette.init Views.Palette.update Views.Palette.view
 |> Program.withLitHydratedInShadowRoot "palette"
 |> Program.run
 ```
 
-What the server writes is `<template shadowrootmode="open">`, which the HTML parser
-attaches as a shadow root while it reads the page — so the element has its shadow DOM,
-and its styles, before any script has run. Turn JavaScript off and it is still there.
+The server writes a `<template shadowrootmode="open">`. The HTML parser turns that into
+a shadow root while it reads the page, so the element has its shadow DOM and its styles
+before any script runs. With JavaScript off it is still there.
 
-Nothing in the hydration protocol needed to change for this. lit finds its bindings by
-walking comment nodes, and comments live in a shadow root like anywhere else. The styles
-sit outside the markers, so they are neither adopted nor re-rendered.
+Hydration itself did not need to change. lit finds its bindings by walking comment
+nodes, and comments work the same inside a shadow root. The styles sit outside the
+markers, so they are neither adopted nor re-rendered.
 
-This is the islands version of declarative shadow DOM, and it is worth being clear about
-what it is not: rendering `LitElement` components on the server the way `@lit-labs/ssr`
-does — walking custom element tags, serialising `static styles`, ordering hydration with
-`defer-hydration` — is a much larger thing that `Lit.Server` does not attempt.
+A caveat on scope: this is server-rendered *templates* placed in a declarative shadow
+root. It is not server rendering of `LitElement` components the way `@lit-labs/ssr` does
+it (walking custom element tags, serialising `static styles`, ordering hydration with
+`defer-hydration`). That is a much larger job and `Lit.Server` does not attempt it.
 
-## The fourth one uses slots
+### Panel: a shadow root with slots
 
 `Palette` puts everything inside its shadow root. `Panel` does the opposite: its shadow
-root is only a frame, and the content it frames stays in the light DOM.
+root is only a frame, and the content stays in the light DOM.
 
 ```html
 <bfb-panel id="panel">
@@ -186,16 +205,18 @@ root is only a frame, and the content it frames stays in the light DOM.
 </bfb-panel>
 ```
 
-The parser does the composing: the template becomes the shadow root, everything after it
-stays where it is, and the slots pull it into place — before a line of script has run.
+The parser does the assembly: the template becomes the shadow root, everything after it
+stays where it is, and the slots display it in place. Again, no script is needed.
 
-The interesting part is which stylesheet reaches what. The frame is styled from inside
-the shadow root, where the page cannot reach it. The card is light DOM, so the page's own
-`.card` rule styles it exactly as it styles the two cards at the top. One element, two
-rulebooks, and the slot is the border between them. `::slotted(h2)` reaches across it,
-but only to the slotted element itself — not to anything inside it.
+Which stylesheet applies to what:
 
-Hydration happens on the **host**, not on the shadow root:
+- The **frame** is inside the shadow root, so only the shadow root's styles reach it.
+- The **card** is light DOM, so the page's `.card` rule styles it, exactly like the
+  Counter and Basket cards.
+- `::slotted(h2)` lets the shadow root style a slotted element, but only that element
+  itself, not anything inside it.
+
+Here hydration happens on the **host element**, not on the shadow root:
 
 ```fsharp
 Program.mkProgram Views.Panel.init Views.Panel.update Views.Panel.view
@@ -203,23 +224,33 @@ Program.mkProgram Views.Panel.init Views.Panel.update Views.Panel.view
 |> Program.run
 ```
 
-By then the `<template>` is gone — the parser took it to build the shadow root — so the
-host's children are the light content and nothing else, which is exactly what the markers
-were written around. The shadow root here has no bindings at all, so there is nothing in
-it to adopt.
+By the time the script runs, the `<template>` is gone (the parser used it to build the
+shadow root). The host's remaining children are the light content, which is exactly what
+the server's markers wrap. The shadow root has no bindings, so there is nothing in it to
+adopt.
 
-### Watching it connect and disconnect
+### Knowing when an element leaves the page
 
-The host is a custom element as far as the browser is concerned — any tag with a dash is
-— so it can be upgraded to one that reports joining and leaving the document. `Client/App.fs`
-does that and logs it:
+The browser treats any tag with a dash in its name as a custom element, and custom
+elements are told when they are added to or removed from the document. `Client/App.fs`
+uses that for `bfb-panel` and logs it:
 
 ```fsharp
-Lit.trackConnection ("bfb-panel", fun _ connected ->
-    console.log ("bfb-panel " + (if connected then "connected" else "disconnected")))
+Lit.trackConnection (
+    "bfb-panel",
+    fun _ ->
+        console.log "bfb-panel connected"
+
+        { new System.IDisposable with
+            member _.Dispose() = console.log "bfb-panel disconnected" }
+)
 ```
 
-Open the console and take it out:
+The function runs when the element is connected, and the `IDisposable` it returns runs
+when the element is disconnected. A timer or a socket would be started and stopped in
+the same two places.
+
+Try it in the console:
 
 ```js
 const panel = document.querySelector('#panel'), parent = panel.parentNode
@@ -227,41 +258,46 @@ panel.remove()                 // bfb-panel disconnected
 parent.appendChild(panel)      // bfb-panel connected
 ```
 
-Those are the browser's own callbacks, not a poll — and they are the only such report the
-platform offers, which is why lit itself borrows them for its components. What lit rendered
-inside is paused and resumed along with them, so an element that was merely moved comes back
-with everything it had. Nothing else in the page has this: remove `#counter` and its program
-never hears about it, because a plain `<div>` has no callbacks to lend.
+These are the browser's own callbacks, not polling, and they are the only notification
+of this kind the platform offers. lit uses the same ones for its components. What lit
+rendered inside the element is paused and resumed with them, so an element that was only
+moved comes back with its state intact.
+
+A plain `<div>` gets no such callbacks. Remove `#counter` and its program never finds
+out.
 
 ## When the state comes from the server
 
-Every component above starts from an `init` both sides can run, which is why none of them
-needs anything shipped alongside the markup: the server and the browser reach the same
-first model separately, and hydration matches by construction.
+Every component so far starts from an `init` that both sides can run, so the server and
+the browser arrive at the same first model on their own.
 
-The last two cannot. **Whether you asked for dark** is not something the browser can work
-out — it is a preference, held in a cookie, and *both* islands display it, so both have to
-start from the same answer.
+The theme cannot work that way. Whether you chose dark mode is stored in a cookie, and
+two islands display it, so both must start from the same answer.
 
-Getting it from the browser is the version everyone has seen: the page arrives in the
-wrong colours and corrects itself a moment later, in front of the reader. So the server
-reads the cookie before it writes anything, and the very first bytes are already right:
+### Avoiding the flash of the wrong theme
+
+If the browser worked out the theme itself, the page would arrive in the wrong colours
+and correct itself a moment later. So the server reads the cookie first, and the very
+first bytes of the page are already right:
 
 ```html
 <html lang="en" data-theme="dark">
 ```
 
-and further down, for the islands:
+Further down, it writes the same value for the scripts to read:
 
 ```html
 <script type="application/json" id="bfb-theme">{"Dark":true}</script>
 ```
 
-The store reads that once, on the way up, and both islands start from the store. So the
-model they begin with is the model their markup was rendered from — the contract hydration
-rests on, and the reason nothing here is fetched after the fact.
+The store reads this once at startup, and both islands start from the store. So the
+model they begin with is the model their markup was rendered from, which is the rule
+hydration depends on. Nothing is fetched afterwards.
 
-These two do not have a loop each. They share one, and it lives in the store:
+### One store, two islands
+
+The two theme islands do not each have their own Elmish loop. They share one, and it
+lives in the store (`Client/ThemeStore.fs`):
 
 ```fsharp
 let private init () = fromPage () |> Option.defaultValue { Dark = false }, Cmd.none
@@ -270,30 +306,31 @@ let private update msg model = Theme.update msg model, Cmd.none
 let store, dispatch = Store.makeElmish init update ignore ()
 ```
 
-`Theme.update` is an ordinary Elmish update — `Msg`, model in, model out — sitting in the
-shared file next to the views, so the server compiles it too. What differs from the four
-components above is only that the loop is not attached to an element. Toggling is
-`dispatch Toggle`, exactly as it would be inside a program.
+`Theme.update` is a normal Elmish update function. It lives in the shared file next to
+the views, so the server compiles it too. Toggling the theme is `dispatch Toggle`, just
+as it would be inside a program.
 
-Note what `makeElmish` does *not* take. `Program.mkProgram` takes init, update **and**
-view, and binds the three together; a store takes init and update and knows nothing about
-rendering. That is precisely what lets two islands share one — and why the store touches
-the DOM exactly once, to read the payload, and never again.
+The difference from the four components above is what the store does *not* take.
+`Program.mkProgram` takes `init`, `update` **and** `view` and ties them together. A
+store takes only `init` and `update` and knows nothing about rendering. That is what
+lets two islands share it. The store touches the DOM exactly once, to read the JSON
+above.
 
-An island is then a view and nothing else:
+An island is then only a view:
 
 ```fsharp
 mount "theme-switch" Theme.switch
 mount "theme-reader" (fun model _ -> Theme.reader model)
 ```
 
-`mount` lives in `App.fs`, next to where the other four islands are started, not in the
-store: it adopts the server's markup with the store's current value and re-renders on
-every change after that. Neither island knows the other exists.
+`mount` is defined in `App.fs`, not in the store. It adopts the server's markup using
+the store's current value, then re-renders on every change. Neither island knows the
+other exists.
 
-What a theme actually has to *do* — paint the page, and remember the choice so the server
-can paint it next time — is neither island's business either, and is one more subscriber
-in the same file:
+### Applying the theme
+
+Painting the page and remembering the choice is not either island's job. It is one more
+subscriber in `App.fs`:
 
 ```fsharp
 ThemeStore.store
@@ -302,25 +339,43 @@ ThemeStore.store
     document.cookie <- $"{Theme.Cookie}={Theme.name model}; path=/; max-age=31536000")
 ```
 
-Click the switch and four things move together: the two islands, the `html` attribute, and
-the cookie. Reload and the server renders the new answer from that cookie, so the page is
-never briefly the wrong colour.
+Click the switch and four things change together: the two islands, the `data-theme`
+attribute on `<html>`, and the cookie. On the next load the server reads the new cookie,
+so the page is never briefly the wrong colour.
 
-The store is [`Fable.Store`](https://github.com/davedawkins/Fable.Store); its commands stay
-on the client, which is why the shared update returns a model and nothing else. A component
-rather than a view can skip the subscription entirely with `Hook.useStore` from
-`Fable.LitStore.Unofficial`.
+With JavaScript off the page is still themed correctly, because .NET read the cookie.
+Only the toggle stops working.
 
-The palette is worth a look while you switch, because its styles are inside a shadow root
-where the page's rules cannot reach — and it changes colour anyway. Custom properties
-inherit straight *through* a shadow boundary even though ordinary rules do not, so a card
-that is sealed against the page's selectors still takes the page's palette.
+Watch the palette while you switch: its styles are sealed in a shadow root, yet it
+changes colour too. CSS custom properties are inherited *through* a shadow boundary even
+though ordinary rules are not, so the card still picks up the page's colours.
+
+The store is [`Fable.Store`](https://github.com/davedawkins/Fable.Store). Its commands
+stay on the client, which is why the shared `update` returns only a model.
+
+### Things to watch when sending state in the page
+
+Only put in the page what the first render needs. Everything else can be fetched once
+the page is running.
+
+**Keep the type simple.** The model is `Dark: bool`, not a `Light | Dark` union. The
+value travels as JSON and is read back with `unbox`, which only works because a bool
+field looks the same in JSON as in F#. A union or an option would not survive the trip.
+If you need one, write a proper encoder/decoder that both sides compile.
+
+**Escaping.** If the JSON contained `</script>`, the browser would end the script
+element there and parse the rest as HTML. `System.Text.Json` escapes `<` by default,
+which makes this safe. A serialiser set to "relaxed" escaping would not be.
+
+**Failing soft.** If the JSON is missing or unreadable, the store logs a warning and
+starts from light. The islands then render over the server's markup instead of adopting
+it. You get a warning and a rebuild, not a broken page.
 
 ## An island is not a component
 
-The seventh card is the odd one out, and it is there to mark where the island pattern
-stops. Everything above it is markup the server wrote and lit adopted, driven from
-`App.fs` by something set up from outside. This one the browser builds:
+The seventh card, the theme badge, shows where the island pattern ends. Everything above
+it is markup the server wrote and lit adopted, started from `App.fs`. The badge is built
+by the browser:
 
 ```fsharp
 [<LitElement("bfb-theme-badge")>]
@@ -330,66 +385,68 @@ let ThemeBadge () =
     html $"""...{Theme.name theme}..."""
 ```
 
-`Hook.useStore` comes from `Fable.LitStore.Unofficial` and is the whole integration. The
-server sent `<bfb-theme-badge></bfb-theme-badge>` and nothing inside it, so there is
-nothing to hydrate here -- and nothing to fetch either, because the store already held the
-answer before any element on the page was upgraded. The component's first render is the
-server's value.
+`Hook.useStore` (from `Fable.LitStore.Unofficial`) is all it takes to connect the
+component to the store. The server sent `<bfb-theme-badge></bfb-theme-badge>` with
+nothing inside, so there is nothing to hydrate. There is nothing to fetch either: the
+store already held the server's value before the element was created, so the
+component's first render shows it.
 
-What it gets that an island does not is a lifecycle. Take it out of the document and put
-it back:
+### What a component has that an island does not
+
+A lifecycle. Take the badge out of the document and put it back:
 
 ```js
 const badge = document.querySelector("bfb-theme-badge")
-const next = badge.nextSibling
-badge.remove()                                // unsubscribes
-// ...toggle the theme while it is gone: it does not follow
-badge.parentNode.insertBefore(badge, next)    // resubscribes, showing what it missed
+const parent = badge.parentNode, next = badge.nextSibling
+badge.remove()                        // unsubscribes
+// ...toggle the theme while it is gone: the badge does not follow
+parent.insertBefore(badge, next)      // resubscribes, and shows what it missed
 ```
 
-The two islands cannot do that. Their subscription is taken in `App.fs` and lives as long
-as the page, because a `<div>` has no callbacks to hang a teardown on -- which is what
-`Lit.trackConnection` exists to borrow, and what `bfb-panel` uses.
+The two theme islands cannot do this. Their subscription is created in `App.fs` and
+lasts as long as the page, because a `<div>` has no callback to clean up in. (That gap
+is what `Lit.trackConnection` fills for `bfb-panel`.)
 
-Reconnection is easy to get wrong in a way nothing reports. `disconnectedCallback`
-disposes what `useEffectOnce` set up; if `connectedCallback` does not put it back, an
-element that was merely *moved* -- reordered by a drag, re-parented by a list re-render --
-comes back alive but deaf. Fable.Lit 2.18.0 is where that got fixed, along with the half
-of it inside `useStore`: resubscribing is not enough on its own, because
-`subscribeImmediate` reports the current value by returning it rather than by calling
-back, so a component that only resubscribed would listen correctly from then on while
-still showing what was true when it left.
+### Two pitfalls
 
-One thing to know about `Fable.Store` before a component is the only reader: a store
-disposes itself when its last subscriber leaves. Here the page-level subscriber in
-`App.fs` holds it, so the badge can come and go. A store read *only* by components will be
-torn down the moment the last one disconnects.
+**Reconnecting.** `disconnectedCallback` disposes whatever `useEffectOnce` set up. If
+`connectedCallback` does not set it up again, an element that was only *moved* (dragged
+to a new position, re-parented by a list re-render) comes back on screen but no longer
+updates, with no error. Fable.Lit 2.18.0 fixed this, including inside `useStore`. There
+it needed two things: resubscribing, and re-reading the current value, because
+`subscribeImmediate` hands back the current value as a return value instead of calling
+the callback. A component that only resubscribed would update from then on but keep
+showing the value from when it left.
 
-With JavaScript switched off the page is still themed correctly, because the cookie was
-read by .NET; only the toggle stops working. That is the honest test of whether a page is
-server-rendered or merely server-delivered.
+**A store with no subscribers disposes itself.** `Fable.Store` tears a store down when
+its last subscriber leaves. Here the page-level subscriber in `App.fs` keeps it alive,
+so the badge can come and go. A store read *only* by components would be destroyed the
+moment the last one disconnects.
 
-Note the type: `Dark: bool` rather than `Light | Dark`. The payload crosses as JSON and
-comes back through `unbox`, and a union would arrive as neither of the shapes F# expects.
-The moment you want a real union here, you want a codec.
+## View Transitions
 
-Three details that are easy to get wrong:
+Things to try on the page:
 
-**Escaping.** A payload containing `</script>` would end the element and the rest of it
-would be parsed as markup. `System.Text.Json` escapes `<` by default, which is what makes
-this safe; a serialiser configured for "relaxed" escaping would not be.
+- Switch the theme: the whole page crossfades, including the shadow roots and the badge.
+- Remove a basket row: the row disappears and the others slide into place. **Reset
+  basket** lets you replay it.
+- The counter, palette and panel animate their changes too.
 
-**The cast.** `unbox` works here because the record is a bool, whose field name survives
-JSON unchanged. A union or an option would need a real codec, written once and compiled by
-both sides — at which point you are choosing between conditional compilation and a
-serialiser that ships for both runtimes.
+How it works:
 
-**Failing soft.** If the payload is missing or unreadable the store warns and starts from
-light, and the islands then render over the server's markup instead of adopting it —
-a warning and a rebuild rather than a broken page.
+- `Client/ViewTransitions.fs` wraps every user-triggered `dispatch` in
+  `document.startViewTransition`. The initial hydration is not animated.
+- The browser takes its "after" snapshot when the update callback finishes. The islands
+  render synchronously, but the badge is a LitElement and renders a moment later, so the
+  callback waits for the badge's `updateComplete`.
+- All islands share one queue, so quick clicks in different cards run in order.
+- If the user prefers reduced motion, or the browser lacks the API, the update just
+  happens without animation.
+- The CSS in `Server/page.html` gives basket rows their own transition names only
+  during a basket transition. A theme transition captures the whole page as one image.
 
-Only what the first render needs belongs in there. Everything else can be fetched once the
-page is alive.
+All browser-specific code is in the client project, so the shared views still compile
+on .NET.
 
 ## Editing it while it runs
 
@@ -397,77 +454,99 @@ page is alive.
 npm run dev
 ```
 
-From a fresh clone too: npm installs what it needs on the way in, the way `dotnet run`
-does. Same page on the same port, but a saved view now reaches the browser without a reload,
-and without losing what is on screen: increment the counter, remove a row, edit
-`Shared/Views.fs`, and the new markup arrives with the count and the basket as you left
-them. Three things run — Fable watching the F#, Vite serving the result, and the server
-restarting when a file it compiles changes.
+This works from a fresh clone; npm installs what it needs first. You get the same page
+on the same port, but saved changes reach the browser without a reload and without
+losing state. Increment the counter, remove a basket row, edit `Shared/Views.fs`, and
+the new markup appears with the count and the basket as you left them.
 
-The page still comes from ASP.NET, and so does everything else it asks for: in dev the
-app proxies what it does not serve itself to the dev server, so the browser sees one
-origin and the markup names no second port. That is `UseSpa` with
-`UseProxyToSpaDevelopmentServer`, guarded to leave `/` alone — it is terminal middleware,
-and unguarded it would answer for the page too, which would end the server rendering
-this demo is about.
+Three things run:
 
-The usual way to do this is `UseReactDevelopmentServer`, which — despite the name — just
-means "run this npm script and wait for that port", and is what an ordinary app should
-reach for. It waits because it *starts* the dev server, and that is the part this demo
-cannot have. A shared view is compiled into the server as well, so editing one restarts
-the server, and a dev server the server owned would go down with it: Fable from cold on
-every edit, and a browser told its dev server has disappeared. So Vite runs alongside
-instead, and the proxy waits for it — through the same seam, the overload that takes a
-task rather than a URL, so the page still renders at once and it is the request for the
-*code* that waits.
+- **Fable**, watching and compiling the F#;
+- **Vite**, serving the compiled client with hot module replacement;
+- **the server**, restarted by nodemon when a file it compiles changes.
 
-The state survives because `Program.withLitHydrated` records the running program on the
-element it renders into. A hot update re-runs the module, the module mounts again, and
-the second mount finds the first: it stops it, takes its model, and renders. One line
-asks for that — `HMR.acceptSelf()` in `Client/App.fs`, which makes the module accept its
-own updates instead of the page being reloaded.
+The rest of this section explains why it is set up this way. You do not need it to use
+the demo.
 
-A dev server is doing real work here. What it provides is one module graph: every
-version of the code shares the *same* lit. Rebuilding a self-contained bundle and
-importing it again looks simpler and is not, because the page then holds two copies of
-lit, and the second is asked to patch DOM whose parts belong to the first —
-`part._$setValue is not a function`, when their internals happen to be named
-differently, and two template caches when they are not.
+**The page still comes from ASP.NET.** In dev, the app proxies anything it does not
+serve itself to Vite, so the browser sees a single origin. That is `UseSpa` with
+`UseProxyToSpaDevelopmentServer`. It is guarded to leave `/` alone: it is terminal
+middleware, and unguarded it would answer for the page too, which would bypass the
+server rendering this demo is about.
 
-The server is restarted rather than hot-reloaded: F# has no hot reload, and a shared
-view is compiled into the server as well. That costs a few seconds, and it is what keeps
-the *next* page load rendering the view you just wrote. It also has to happen *after* the
-browser has taken the update, since the update is fetched through the very app being
-restarted — hence `nodemon --delay`, which lets the hot update go first.
+**Vite runs next to the server, not under it.** The usual choice is
+`UseReactDevelopmentServer`, which (despite the name) just runs an npm script and waits
+for a port, and is what an ordinary app should use. It cannot be used here. Shared views
+are compiled into the server, so editing one restarts the server, and a dev server
+started by the server would be killed with it. Fable would recompile from cold on every
+edit and the browser would be told its dev server had disappeared. So Vite is started
+separately and the proxy waits for it, using the overload that takes a task rather than
+a URL. The page still renders immediately; only the request for the script waits.
 
-Two things in dev are switched off rather than configured. Static files: the page asks
-for `/App.js`, `wwwroot` holds `app.js`, and on a case-insensitive filesystem those are
-the same request — the bundle answers, the dev server is never reached, and the page runs
-last build's code while looking perfectly alive. And Vite's hot-update socket connects
-straight to Vite rather than through the proxy, because a socket through the app dies
-whenever the app restarts, and Vite reasonably reads that as "the dev server is gone" and
-reloads the page.
+**State survives a hot update.** `Program.withLitHydrated` records the running program
+on the element it renders into. A hot update re-runs the module, the module mounts
+again, and the second mount finds the first: it stops it, takes its model, and renders.
+The one line that opts in is `HMR.acceptSelf()` in `Client/App.fs`, which makes the
+module accept its own updates instead of reloading the page.
+
+**A dev server is needed, not just a rebuilt bundle.** Vite gives every version of the
+code the *same* copy of lit. Rebuilding a self-contained bundle and importing it again
+looks simpler, but the page then holds two copies of lit, and the second is asked to
+patch DOM created by the first. That fails with `part._$setValue is not a function`
+when their internals are named differently, and leaves two template caches when they
+are not.
+
+**The server restarts instead of hot reloading.** F# has no hot reload, and shared
+views are compiled into the server. A restart takes a few seconds, and it is what makes
+the *next* page load render the view you just wrote. It has to happen *after* the
+browser has fetched the hot update, because that update is fetched through the app
+being restarted. That is what `nodemon --delay` is for.
+
+**Static files are off in dev.** The page asks for `/App.js` and `wwwroot` contains
+`app.js`. On a case-insensitive filesystem those are the same file, so the old bundle
+would be served, Vite would never be reached, and the page would quietly run the last
+build's code.
+
+**Vite's hot-update socket bypasses the proxy.** A socket through the app would drop
+every time the app restarts. Vite would take that to mean the dev server is gone and
+reload the page.
+
+## Running it in Docker
+
+The Docker image builds the client and publishes the ASP.NET app with .NET 10. Node is
+used only during the build. The container runs as a non-root user on port 8080.
+
+```bash
+docker build -t litdemo .
+docker run --rm -p 8080:8080 litdemo
+```
 
 ## What it does not do
 
-`Lit.Server` renders templates, not components, so a `HookComponent` or a `LitElement`
-has no server rendering. Under Elmish that costs less than it sounds: the model is
-`useState` and `Cmd` is `useEffect`, so the state and the effects live in the loop and
-the view stays a function of the model — which is the part both compilers can render.
-Directives it cannot honour faithfully, such as `styleMap` or `until`, raise rather than
-being approximated.
+`Lit.Server` renders templates, not components. A `HookComponent` or a `LitElement`
+cannot be rendered on the server.
+
+With Elmish this costs less than it sounds. The model does the job of `useState` and
+`Cmd` does the job of `useEffect`, so state and effects live in the loop and the view
+stays a plain function of the model. That function is the part both compilers can
+render.
+
+Directives the server cannot reproduce faithfully, such as `styleMap` or `until`, throw
+an error instead of producing an approximation.
 
 ## Packages
 
-| | |
+| Package | What it is for |
 |---|---|
 | `Fable.Lit.Unofficial` | lit bindings for Fable, plus `Hydrate.adopt` |
 | `Fable.Lit.Elmish.Unofficial` | `Program.withLitHydrated` |
-| `Lit.Server.Unofficial` | renders those templates to HTML on .NET |
+| `Fable.LitStore.Unofficial` | `Hook.useStore`, for components that read a store |
+| `Lit.Server.Unofficial` | renders the same templates to HTML on .NET |
 | `HtmlTypeProvider` | typed HTML page templates |
 | `Microsoft.AspNetCore.SpaServices.Extensions` | dev only: proxies to the dev server |
 
-The first two come from an [unofficial fork](https://github.com/OnurGumus/Fable.Lit) of
+`Fable.Lit.Unofficial` and `Fable.Lit.Elmish.Unofficial` come from an
+[unofficial fork](https://github.com/OnurGumus/Fable.Lit) of
 [Fable.Lit](https://github.com/fable-compiler/Fable.Lit), which was last released in
 2022. They are published under `.Unofficial` ids and will be deprecated if the changes
 land upstream.
