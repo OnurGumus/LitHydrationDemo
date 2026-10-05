@@ -29,22 +29,19 @@ docker build -t litdemo .
 docker run --rm -p 8080:8080 litdemo
 ```
 
-For the existing Kubernetes cluster, `./builddocker.sh` builds and pushes a unique
-`linux/amd64` image to `docker.3dpack.ing/litdemo`, validates and applies
-`kubernetes-deployment.yaml`, and waits for the rollout. It explicitly targets context
-`microk8s-low` (override with `KUBE_CONTEXT`). It requires Docker registry credentials,
-kubectl access, the existing `regcred2` pull secret, nginx ingress, and the
-`letsencrypt` ClusterIssuer. No database or persistent volume is needed.
-
-DNS: point the `litdemo.novian.works` A record at `157.180.8.180`. Cert-manager issues
-the HTTPS certificate once the hostname reaches the ingress. `/healthz` serves the
-readiness and liveness probes.
+`kubernetes-deployment.yaml` and `./builddocker.sh` deploy the same image to Kubernetes:
+the script builds and pushes a uniquely tagged `linux/amd64` image, validates and applies
+the manifest, and waits for the rollout. Both are written for the cluster behind the live
+demo, so change the image registry, pull secret, ingress host and kubectl context to your
+own before using them. The manifest expects an nginx ingress controller and a
+cert-manager ClusterIssuer for the HTTPS certificate. `/healthz` serves the readiness
+and liveness probes. No database or persistent volume is needed.
 
 To inspect or roll back a deployment:
 
 ```bash
-kubectl --context microk8s-low -n default get pods,ingress,certificate -l app=litdemo
-kubectl --context microk8s-low -n default rollout undo deployment/litdemo
+kubectl get pods,ingress,certificate -l app=litdemo
+kubectl rollout undo deployment/litdemo
 ```
 
 ## What this shows
