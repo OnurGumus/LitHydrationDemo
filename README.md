@@ -100,7 +100,7 @@ re-created, nothing is rendered twice, and the programs never touch each other's
 
 | File | What is in it |
 |---|---|
-| `Shared/Views.fs` | The five Elmish components: Counter, Basket, Palette, Panel, Shelf |
+| `Shared/Views.fs` | The five Elmish components: Counter, Basket, Palette, Panel, Shelf, and what the meter draws |
 | `Shared/Theme.fs` | The theme state, its `update`, and the views that show it, including what the badge draws |
 | `Client/App.fs` | Starts everything in the browser: one program per component |
 | `Client/ThemeStore.fs` | The shared theme store, and the one DOM read that starts it |
@@ -389,9 +389,9 @@ custom element. The browser builds it, and it starts itself:
 ```fsharp
 [<LitElement("bfb-theme-badge")>]
 let ThemeBadge () =
-    LitElement.init (fun config -> config.styles <- [ Lit.unsafeCSS Theme.badgeStyles ]) |> ignore
+    LitElement.init (fun config -> config.styles <- [ Lit.unsafeCSS Theme.Badge.styles ]) |> ignore
     let theme = Hook.useStore ThemeStore.store
-    Theme.badge theme (ViewTransitions.dispatch "theme" ThemeStore.dispatch)
+    Theme.Badge.view theme (ViewTransitions.dispatch "theme" ThemeStore.dispatch)
 ```
 
 `Hook.useStore` (from `Fable.LitStore.Unofficial`) is all it takes to connect the
@@ -402,12 +402,12 @@ value before the element was created, so the component's first render shows it.
 
 A component function uses hooks, so the server cannot run it. What the server can run
 is the view the component returns, as long as that view is a plain function in a shared
-file. `Theme.badge` and `Theme.badgeStyles` are that, and the server writes them into
-the component's own tag as a shadow root:
+file. `Theme.Badge.view` and `Theme.Badge.styles` are that, and the server writes them
+into the component's own tag as a shadow root:
 
 ```fsharp
 // Server: fills <bfb-theme-badge>${Badge}</bfb-theme-badge> in page.html
-.Badge(toShadowRootNode Theme.badgeStyles (Theme.badge theme ignore))
+.Badge(toShadowRootNode Theme.Badge.styles (Theme.Badge.view theme ignore))
 
 // Client, once, in App.fs
 Hydrate.elements ()
@@ -465,13 +465,19 @@ let view model dispatch =
     html
         $"""<section class="card">
               ...
-              <bfb-meter .level={model.Level}>{Lit.shadowRoot meterStyles (meter model.Level)}</bfb-meter>
+              <bfb-meter .level={model.Level}>{Meter.drawn model.Level}</bfb-meter>
               ...
             </section>"""
 ```
 
-`Lit.shadowRoot` (Fable.Lit 2.21.0) is how a shared view says what a component inside
-it draws. It means two different things, on purpose:
+`Meter.drawn` is one line in the meter's shared module:
+
+```fsharp
+let drawn (level: int) = Lit.shadowRoot styles (view level)
+```
+
+`Lit.shadowRoot` (Fable.Lit 2.21.0) is how shared code says what a component draws when
+it sits inside a view. It means two different things, on purpose:
 
 - On the server it writes the component's shadow root into its tag, so the meter arrives
   rendered.
@@ -483,6 +489,23 @@ badge uses.
 
 Nothing in `App.fs` mentions any of this. The shelf is mounted like the counter, and
 the meter is a component, so it starts itself.
+
+### Saying it once
+
+`Lit.Server` cannot work out which stylesheet a component has. The component is client
+code with hooks in it, and the server never sees it. So the stylesheet and the view have
+to be paired by hand, and the demo does that in one place per component: a small shared
+module that uses the same names each time.
+
+- `styles`: the stylesheet, as a string.
+- `view`: what the component draws.
+- `drawn`: the two together as a shadow root, for a component that sits inside a view.
+
+`Views.Meter` has all three. `Theme.Badge` has the first two, because the badge sits in
+the page, where `Server/Program.fs` hands them to `toShadowRootNode` itself.
+
+The element gives `styles` to lit and returns `view`. A view only ever writes
+`{Meter.drawn level}`. No view names a stylesheet, so no view can name the wrong one.
 
 ### Why the meter waits
 
@@ -611,7 +634,8 @@ theme badge and the meter arrive rendered.
 
 It does not work out a component's stylesheet for you, the way `@lit-labs/ssr` does. You
 pass the styles as a string, to `toShadowRootNode` or `Lit.shadowRoot`, and give the same
-string to the component.
+string to the component. [Saying it once](#saying-it-once) is how the demo keeps that to
+one place per component.
 
 With Elmish this costs less than it sounds. The model does the job of `useState` and
 `Cmd` does the job of `useEffect`, so state and effects live in the loop and the view

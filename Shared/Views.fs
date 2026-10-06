@@ -194,38 +194,24 @@ module Panel =
                   <button @click={Ev(fun _ -> dispatch Next)}>next</button>
                 </section>"""
 
-/// A fifth component, and the first with another component inside it.
+/// What the meter draws. The meter is a component, not an island: the element is in
+/// Client/Meter.fs, and this is the part of it that both sides need.
 ///
-/// The card is an island like the first two: an Elmish program adopts its markup. What
-/// it draws the level with is not markup of its own but a component, `<bfb-meter>`,
-/// which has a shadow root and its own styles and no idea that it is inside anything.
-/// The island hands it the level as a property.
+/// It says three things, and says each of them once. `styles` and `view` are what the
+/// meter draws with and what it draws. `drawn` is the two together, as the shadow root
+/// the server writes into the meter's tag wherever a view has a meter in it -- and
+/// nothing at all in the browser, where the meter draws its own.
 ///
-/// Both arrive drawn. `Lit.shadowRoot` below is how the view says what the meter draws:
-/// on the server it writes the meter's shadow root into its tag, and in the browser it
-/// is `Lit.nothing`, because there the meter draws its own. And because a property is
-/// not in the HTML, the server marks the meter `defer-hydration`: it waits until the
-/// island has hydrated and handed it the level, and only then takes its root over.
-module Shelf =
-
-    type Model = { Level: int }
-
-    type Msg =
-        | Less
-        | More
+/// A view uses `drawn` and never names the stylesheet. Lit.Server cannot work out which
+/// stylesheet a component has, because the component is client code it never sees; so
+/// the pairing has to be written down somewhere, and here it is written down once.
+module Meter =
 
     let capacity = 5
 
-    let init () = { Level = 3 }, Cmd.none
-
-    let update msg model =
-        match msg with
-        | Less -> { model with Level = max 0 (model.Level - 1) }, Cmd.none
-        | More -> { model with Level = min capacity (model.Level + 1) }, Cmd.none
-
-    /// The meter's own stylesheet. A string, because the server writes it into a style
-    /// element in the meter's root, and Client/Meter.fs hands the same text to lit.
-    let meterStyles =
+    /// A string, because the server writes it into a style element in the meter's root,
+    /// and Client/Meter.fs hands the same text to lit.
+    let styles =
         """
         /* The page's rules do not reach in here, and its custom properties do, as in
            the palette and the badge: the meter is drawn in the page's colours. */
@@ -240,18 +226,51 @@ module Shelf =
     let private cell (filled: bool) =
         html $"""<span class={Lit.classes [ "cell", true; "on", filled ]}></span>"""
 
-    /// What the meter draws: the same function on the server and in Client/Meter.fs.
+    /// The same function on the server and in Client/Meter.fs.
     ///
-    /// A different template for an empty shelf, and that is what makes the waiting
+    /// A different template for an empty meter, and that is what makes the waiting
     /// matter. The meter's level is zero until somebody sets it, so a meter that drew
     /// itself the moment it was defined would draw this branch, against markup the
     /// server made from the other one.
-    let meter (level: int) =
+    let view (level: int) =
         if level = 0 then
             html $"""<p class="empty">empty</p>"""
         else
             let cells = [ for position in 1..capacity -> cell (position <= level) ]
             html $"""<div class="cells">{Lit.ofList cells}</div>"""
+
+    /// The meter's shadow root, for a view with a meter in it: what the server writes
+    /// into the meter's tag, and `Lit.nothing` in the browser.
+    let drawn (level: int) = Lit.shadowRoot styles (view level)
+
+/// A fifth component, and the first with another component inside it.
+///
+/// The card is an island like the first two: an Elmish program adopts its markup. What
+/// it draws the level with is not markup of its own but a component, `<bfb-meter>`,
+/// which has a shadow root and its own styles and no idea that it is inside anything.
+/// The island hands it the level as a property.
+///
+/// Both arrive drawn. `Meter.drawn` below is how the view says what the meter draws: on
+/// the server it is the meter's shadow root, written into its tag, and in the browser it
+/// is nothing, because there the meter draws its own. And because a property is not in
+/// the HTML, the server marks the meter `defer-hydration`: it waits until the island has
+/// hydrated and handed it the level, and only then takes its root over.
+module Shelf =
+
+    type Model = { Level: int }
+
+    type Msg =
+        | Less
+        | More
+
+    let capacity = Meter.capacity
+
+    let init () = { Level = 3 }, Cmd.none
+
+    let update msg model =
+        match msg with
+        | Less -> { model with Level = max 0 (model.Level - 1) }, Cmd.none
+        | More -> { model with Level = min capacity (model.Level + 1) }, Cmd.none
 
     let view model dispatch =
         html
@@ -259,7 +278,7 @@ module Shelf =
                   <h2>Shelf, with a component inside</h2>
                   <p>Level <b class="level">{model.Level}</b> of {capacity}. The island keeps the
                      number and hands it to the meter, which is a component.</p>
-                  <bfb-meter .level={model.Level}>{Lit.shadowRoot meterStyles (meter model.Level)}</bfb-meter>
+                  <bfb-meter .level={model.Level}>{Meter.drawn model.Level}</bfb-meter>
                   <button @click={Ev(fun _ -> dispatch Less)}>less</button>
                   <button @click={Ev(fun _ -> dispatch More)}>more</button>
                 </section>"""

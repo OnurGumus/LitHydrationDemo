@@ -177,7 +177,7 @@ let main args =
                         // same: its view and its styles, inside the shadow root the
                         // parser will attach to its tag. The browser's copy of the
                         // component finds it there and takes it over.
-                        .Badge(toShadowRootNode Theme.badgeStyles (Theme.badge theme ignore))
+                        .Badge(toShadowRootNode Theme.Badge.styles (Theme.Badge.view theme ignore))
                         // An island with a component in its view. One call renders both:
                         // the view says what the component draws, and that is written
                         // into the component's tag as its shadow root.

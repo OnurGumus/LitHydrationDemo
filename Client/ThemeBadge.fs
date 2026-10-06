@@ -10,7 +10,7 @@
 /// the initialiser and hand it to `useEffectOnce` -- set up on connect, disposed on
 /// disconnect, without a line of it written here.
 ///
-/// The server draws it all the same. What it renders is `Theme.badge`, in the shared
+/// The server draws it all the same. What it renders is `Theme.Badge.view`, in the shared
 /// file, so the server can write the same thing into this element's tag as a shadow
 /// root; `Hydrate.elements` in `App.fs` is what makes the component take that root over
 /// when it is defined, rather than draw a second copy beside it.
@@ -21,7 +21,7 @@ open LitStore
 
 [<LitElement("bfb-theme-badge")>]
 let ThemeBadge () =
-    LitElement.init (fun config -> config.styles <- [ Lit.unsafeCSS Theme.badgeStyles ])
+    LitElement.init (fun config -> config.styles <- [ Lit.unsafeCSS Theme.Badge.styles ])
     |> ignore
 
     // The same store the two islands read. It was filled from the page before any element
@@ -39,7 +39,7 @@ let ThemeBadge () =
     // Note what does *not* happen here: no local state, no marking this component as the
     // one that changed it. The message goes to the store, the store updates, and this
     // component hears about it on the same subscription as everybody else.
-    Theme.badge theme (ViewTransitions.dispatch "theme" ThemeStore.dispatch)
+    Theme.Badge.view theme (ViewTransitions.dispatch "theme" ThemeStore.dispatch)
 
 /// Nothing in F# ever calls a custom element: it is asked for by tag name, from HTML no
 /// bundler reads. Without a reference from `App.fs` this module is never imported, never
