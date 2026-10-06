@@ -12,9 +12,9 @@
     <Compile Include="App.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Fable.Lit.Elmish.Unofficial" Version="2.21.0" />
-    <PackageReference Include="Fable.Lit.Unofficial" Version="2.21.0" />
-    <PackageReference Include="Fable.LitStore.Unofficial" Version="2.21.0" />
+    <PackageReference Include="Fable.Lit.Elmish.Unofficial" Version="2.21.1" />
+    <PackageReference Include="Fable.Lit.Unofficial" Version="2.21.1" />
+    <PackageReference Include="Fable.LitStore.Unofficial" Version="2.21.1" />
     <PackageReference Include="Fable.Store" Version="1.0.0-beta-005" />
   </ItemGroup>
 </Project>
