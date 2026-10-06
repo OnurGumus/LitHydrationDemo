@@ -507,6 +507,12 @@ the page, where `Server/Program.fs` hands them to `toShadowRootNode` itself.
 The element gives `styles` to lit and returns `view`. A view only ever writes
 `{Meter.drawn level}`. No view names a stylesheet, so no view can name the wrong one.
 
+The page is the one place that still passes the styles by hand, in `Server/Program.fs`.
+If that ever goes wrong, or a stylesheet is edited on one side only, nothing breaks: the
+component arrives looking one way, or unstyled, and changes when its script loads. Under
+`npm run dev`, Fable.Lit 2.21.2 says so in the console and names the component.
+Production builds stay quiet.
+
 ### Why the meter waits
 
 The island hands the meter its level as a property (`.level=`), and a property is not in
