@@ -54,9 +54,9 @@ Seven cards, each showing one more thing:
 | **Palette** | The same thing inside a shadow root. |
 | **Panel** | A shadow root used only as a frame, with the content slotted in from the light DOM. |
 | **Theme reader** | A second island reading the same store as the theme switch. |
-| **Theme badge** | A real lit component (not an island), built in the browser, reading that store too. |
+| **Theme badge** | A real lit component (not an island), reading that store too. The server renders it and the component takes it over. |
 
-The first six arrive as HTML from .NET. The badge arrives as an empty tag on purpose.
+All seven arrive as HTML from .NET. Code in `App.fs` adopts the first six. The badge adopts itself.
 
 ## How hydration works
 
@@ -99,7 +99,7 @@ re-created, nothing is rendered twice, and the programs never touch each other's
 | File | What is in it |
 |---|---|
 | `Shared/Views.fs` | The four Elmish components: Counter, Basket, Palette, Panel |
-| `Shared/Theme.fs` | The theme state, its `update`, and the two views that show it |
+| `Shared/Theme.fs` | The theme state, its `update`, and the views that show it, including what the badge draws |
 | `Client/App.fs` | Starts everything in the browser: one program per component |
 | `Client/ThemeStore.fs` | The shared theme store, and the one DOM read that starts it |
 | `Client/ThemeBadge.fs` | The lit component that reads the store |
@@ -188,6 +188,8 @@ A caveat on scope: this is server-rendered *templates* placed in a declarative s
 root. It is not server rendering of `LitElement` components the way `@lit-labs/ssr` does
 it (walking custom element tags, serialising `static styles`, ordering hydration with
 `defer-hydration`). That is a much larger job and `Lit.Server` does not attempt it.
+A component can still arrive rendered, as the theme badge does. See
+[An island is not a component](#an-island-is-not-a-component).
 
 ### Panel: a shadow root with slots
 
@@ -378,22 +380,44 @@ it. You get a warning and a rebuild, not a broken page.
 ## An island is not a component
 
 The seventh card, the theme badge, shows where the island pattern ends. Everything above
-it is markup the server wrote and lit adopted, started from `App.fs`. The badge is built
-by the browser:
+it is markup the server wrote and lit adopted, started from `App.fs`. The badge is a
+custom element. The browser builds it, and it starts itself:
 
 ```fsharp
 [<LitElement("bfb-theme-badge")>]
 let ThemeBadge () =
-    LitElement.init (fun config -> config.styles <- [ css $"..." ]) |> ignore
+    LitElement.init (fun config -> config.styles <- [ Lit.unsafeCSS Theme.badgeStyles ]) |> ignore
     let theme = Hook.useStore ThemeStore.store
-    html $"""...{Theme.name theme}..."""
+    Theme.badge theme (ViewTransitions.dispatch "theme" ThemeStore.dispatch)
 ```
 
 `Hook.useStore` (from `Fable.LitStore.Unofficial`) is all it takes to connect the
-component to the store. The server sent `<bfb-theme-badge></bfb-theme-badge>` with
-nothing inside, so there is nothing to hydrate. There is nothing to fetch either: the
-store already held the server's value before the element was created, so the
-component's first render shows it.
+component to the store. There is nothing to fetch: the store already held the server's
+value before the element was created, so the component's first render shows it.
+
+### The server renders it too
+
+A component function uses hooks, so the server cannot run it. What the server can run
+is the view the component returns, as long as that view is a plain function in a shared
+file. `Theme.badge` and `Theme.badgeStyles` are that, and the server writes them into
+the component's own tag as a shadow root:
+
+```fsharp
+// Server: fills <bfb-theme-badge>${Badge}</bfb-theme-badge> in page.html
+.Badge(toShadowRootNode Theme.badgeStyles (Theme.badge theme ignore))
+
+// Client, once, in App.fs
+Hydrate.elements ()
+```
+
+`Hydrate.elements ()` (Fable.Lit 2.20.0) makes a component that finds a server-rendered
+shadow root on itself adopt it on its first render. Without that line the component
+renders a second copy next to the server's, and the server's copy does nothing. The
+console tells you so.
+
+The rule is the same as for islands: the first render in the browser must match what
+the server rendered. Here it does, because both read the same theme: the server from the
+cookie, and the component from the store that was filled from the page.
 
 ### What a component has that an island does not
 
@@ -527,8 +551,15 @@ docker run --rm -p 8080:8080 litdemo
 
 ## What it does not do
 
-`Lit.Server` renders templates, not components. A `HookComponent` or a `LitElement`
-cannot be rendered on the server.
+`Lit.Server` renders templates, not components. It cannot run a `HookComponent` or a
+`LitElement`, because hooks mean nothing on the server. It can render the view a
+component returns, when that view is a plain function in a shared file. That is how the
+theme badge arrives rendered.
+
+There is no `defer-hydration`. A component adopts as soon as it is defined, so its first
+render must come from its own state, its attributes or a store, not from properties a
+parent sets later. A shadow root also cannot be written *inside* a view:
+`toShadowRootNode` goes into the page, at the component's tag.
 
 With Elmish this costs less than it sounds. The model does the job of `useState` and
 `Cmd` does the job of `useEffect`, so state and effects live in the loop and the view
