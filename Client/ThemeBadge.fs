@@ -10,8 +10,10 @@
 /// the initialiser and hand it to `useEffectOnce` -- set up on connect, disposed on
 /// disconnect, without a line of it written here.
 ///
-/// It is also the one card on the page the server did not render. There is nothing to
-/// hydrate: the markup did not exist until this ran.
+/// The server draws it all the same. What it renders is `Theme.badge`, in the shared
+/// file, so the server can write the same thing into this element's tag as a shadow
+/// root; `Hydrate.elements` in `App.fs` is what makes the component take that root over
+/// when it is defined, rather than draw a second copy beside it.
 module ThemeBadge
 
 open Lit
@@ -19,28 +21,13 @@ open LitStore
 
 [<LitElement("bfb-theme-badge")>]
 let ThemeBadge () =
-    LitElement.init (fun config ->
-        config.styles <-
-            [ css
-                  $"""
-                  /* Same crossing as the palette: rules stop at this boundary, custom
-                     properties do not, so the badge is themed by the page it is sealed
-                     against. */
-                  :host {{ display: block; margin-bottom: 1rem; }}
-                  .card {{ border: 1px solid var(--line); background: var(--card);
-                           border-radius: 10px; padding: 1rem 1.25rem; max-width: 30rem;
-                           font: 15px/1.5 system-ui; color: var(--ink); }}
-                  h2 {{ margin: 0 0 .5rem; font-size: 1.05rem; }}
-                  code {{ background: var(--field); padding: .1rem .3rem; border-radius: 4px; }}
-                  button {{ font: inherit; padding: .25rem .7rem; color: inherit;
-                            background: var(--field); border: 1px solid var(--line);
-                            border-radius: 6px; }}
-                  """ ])
+    LitElement.init (fun config -> config.styles <- [ Lit.unsafeCSS Theme.badgeStyles ])
     |> ignore
 
     // The same store the two islands read. It was filled from the page before any element
     // on it was upgraded, so this component's very first render already has the server's
-    // answer -- no default to flash, no fetch to await.
+    // answer -- no default to flash, no fetch to await. It is also what lets it adopt:
+    // the first render has to be the one the server made.
     let theme = Hook.useStore ThemeStore.store
 
     // Writing does not come from the hook, and does not need to. `dispatch` is the one
@@ -52,22 +39,7 @@ let ThemeBadge () =
     // Note what does *not* happen here: no local state, no marking this component as the
     // one that changed it. The message goes to the store, the store updates, and this
     // component hears about it on the same subscription as everybody else.
-    html
-        $"""<section class="card">
-              <h2>A component, not an island</h2>
-              <p>The server sent an empty <code>&lt;bfb-theme-badge&gt;</code> and nothing
-                 inside it. This is <b class="theme">{Theme.name theme}</b> because the
-                 store already knew.</p>
-              <p>It can write to the store as well as read it, and the two islands above
-                 follow &mdash; the same way this one follows them.</p>
-              <button @click={Ev(fun _ -> ViewTransitions.dispatch "theme" ThemeStore.dispatch Theme.Toggle)}>
-                switch to {if theme.Dark then "light" else "dark"}
-              </button>
-              <p>Remove it and put it back &mdash; <code>document.querySelector("bfb-theme-badge").remove()</code>
-                 &mdash; and it unsubscribes and resubscribes on its own. That is what a
-                 component gets for free and an island needs
-                 <code>Lit.trackConnection</code> for.</p>
-            </section>"""
+    Theme.badge theme (ViewTransitions.dispatch "theme" ThemeStore.dispatch)
 
 /// Nothing in F# ever calls a custom element: it is asked for by tag name, from HTML no
 /// bundler reads. Without a reference from `App.fs` this module is never imported, never

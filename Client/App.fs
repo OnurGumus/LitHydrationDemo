@@ -98,6 +98,12 @@ mount "theme-reader" (fun model _ -> Theme.reader model)
 // And the same store read by something that is not an island at all. Defining the element
 // is the whole of it: the browser finds the tag the server sent, upgrades it, and the
 // component subscribes and unsubscribes with its own connection.
+//
+// The server drew this one as well, into a shadow root inside its tag. The first line is
+// what makes the component take that root over when it is defined, rather than draw a
+// second copy beside it. It is a call and not an import, so where it comes is of no
+// consequence, as long as it is while this file is still starting things up.
+Hydrate.elements ()
 ThemeBadge.register ()
 
 // What a theme actually has to do, which is neither island's business and certainly not

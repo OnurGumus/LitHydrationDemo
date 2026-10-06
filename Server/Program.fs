@@ -172,6 +172,11 @@ let main args =
                         )
                         .ThemeSwitch(toHydratableNode (Theme.switch theme ignore))
                         .ThemeReader(toHydratableNode (Theme.reader theme))
+                        // A component rather than an island, and drawn here all the
+                        // same: its view and its styles, inside the shadow root the
+                        // parser will attach to its tag. The browser's copy of the
+                        // component finds it there and takes it over.
+                        .Badge(toShadowRootNode Theme.badgeStyles (Theme.badge theme ignore))
                         .ThemePayload(themePayload theme)
                         // The attribute the stylesheet keys off, written before anything
                         // is sent: this is the difference between a page that is dark and
