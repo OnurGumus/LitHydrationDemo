@@ -37,14 +37,14 @@ To work on it with hot reload, see [Editing it while it runs](#editing-it-while-
 |---|---|
 | **Hydrate / adopt** | The browser script takes over HTML the server already rendered, rather than replacing it. |
 | **Island** | One interactive region of the page: a container element whose content the server rendered and one piece of client code drives. |
-| **Elmish program** | A model, an `update` function and a `view` function, running as a loop. Counter, Basket, Palette and Panel are each one. |
+| **Elmish program** | A model, an `update` function and a `view` function, running as a loop. Counter, Basket, Palette, Panel and Shelf are each one. |
 | **Store** | An Elmish loop that is not tied to any element, so several islands can read the same state. |
 | **Shadow root** | A sealed part of the DOM with its own styles. Page styles do not reach in and its styles do not leak out. |
 | **Light DOM** | The ordinary DOM, outside any shadow root. |
 
 ## What is on the page
 
-Seven cards, each showing one more thing:
+Eight cards, each showing one more thing:
 
 | Card | What it demonstrates |
 |---|---|
@@ -55,8 +55,10 @@ Seven cards, each showing one more thing:
 | **Panel** | A shadow root used only as a frame, with the content slotted in from the light DOM. |
 | **Theme reader** | A second island reading the same store as the theme switch. |
 | **Theme badge** | A real lit component (not an island), reading that store too. The server renders it and the component takes it over. |
+| **Shelf** | An island with a real lit component inside it. The server renders both, and the component waits for the island before it takes over. |
 
-All seven arrive as HTML from .NET. Code in `App.fs` adopts the first six. The badge adopts itself.
+All eight arrive as HTML from .NET. Code in `App.fs` adopts the islands. The badge
+adopts itself, and so does the meter inside the shelf.
 
 ## How hydration works
 
@@ -98,11 +100,12 @@ re-created, nothing is rendered twice, and the programs never touch each other's
 
 | File | What is in it |
 |---|---|
-| `Shared/Views.fs` | The four Elmish components: Counter, Basket, Palette, Panel |
+| `Shared/Views.fs` | The five Elmish components: Counter, Basket, Palette, Panel, Shelf |
 | `Shared/Theme.fs` | The theme state, its `update`, and the views that show it, including what the badge draws |
 | `Client/App.fs` | Starts everything in the browser: one program per component |
 | `Client/ThemeStore.fs` | The shared theme store, and the one DOM read that starts it |
 | `Client/ThemeBadge.fs` | The lit component that reads the store |
+| `Client/Meter.fs` | The lit component inside the shelf island |
 | `Client/ViewTransitions.fs` | Wraps updates in a view transition |
 | `Server/Program.fs` | Minimal ASP.NET app; renders each component with `toHydratableNode` |
 | `Server/page.html` | The page shell: an `HtmlTypeProvider` template with one container per component |
@@ -185,11 +188,11 @@ nodes, and comments work the same inside a shadow root. The styles sit outside t
 markers, so they are neither adopted nor re-rendered.
 
 A caveat on scope: this is server-rendered *templates* placed in a declarative shadow
-root. It is not server rendering of `LitElement` components the way `@lit-labs/ssr` does
-it (walking custom element tags, serialising `static styles`, ordering hydration with
-`defer-hydration`). That is a much larger job and `Lit.Server` does not attempt it.
-A component can still arrive rendered, as the theme badge does. See
-[An island is not a component](#an-island-is-not-a-component).
+root. `Lit.Server` does not walk custom element tags or work out a component's
+`static styles` the way `@lit-labs/ssr` does. A component can still arrive rendered: at
+page level like the theme badge, or inside a view like the meter. See
+[An island is not a component](#an-island-is-not-a-component) and
+[A component inside an island](#a-component-inside-an-island).
 
 ### Panel: a shadow root with slots
 
@@ -451,6 +454,56 @@ its last subscriber leaves. Here the page-level subscriber in `App.fs` keeps it 
 so the badge can come and go. A store read *only* by components would be destroyed the
 moment the last one disconnects.
 
+## A component inside an island
+
+The eighth card, the shelf, puts the two together. The card is an island: an Elmish
+program adopts its markup. Inside its view is a component, `<bfb-meter>`, which draws
+the level in a shadow root of its own.
+
+```fsharp
+let view model dispatch =
+    html
+        $"""<section class="card">
+              ...
+              <bfb-meter .level={model.Level}>{Lit.shadowRoot meterStyles (meter model.Level)}</bfb-meter>
+              ...
+            </section>"""
+```
+
+`Lit.shadowRoot` (Fable.Lit 2.21.0) is how a shared view says what a component inside
+it draws. It means two different things, on purpose:
+
+- On the server it writes the component's shadow root into its tag, so the meter arrives
+  rendered.
+- In the browser it is `Lit.nothing`, because there a component draws its own root.
+
+It has to be the first thing inside the component's tag. At page level, where there is
+no view around the component, `toShadowRootNode` does the same job. That is what the
+badge uses.
+
+Nothing in `App.fs` mentions any of this. The shelf is mounted like the counter, and
+the meter is a component, so it starts itself.
+
+### Why the meter waits
+
+The island hands the meter its level as a property (`.level=`), and a property is not in
+the HTML. A meter that started the moment it was defined would start at level zero and
+draw "empty", which is not what the server drew for level three.
+
+So `Lit.Server` marks it:
+
+```html
+<bfb-meter defer-hydration>
+```
+
+`defer-hydration` is lit's own attribute for "not yet". The meter does nothing while the
+attribute is there. When the island hydrates, lit removes the attribute and sets
+`.level` in the same pass. Only then does the meter start, and adopt its shadow root.
+
+The mark is written only when the view hands the component a property, and only in
+markup that will be hydrated. A component that gets everything from attributes, its own
+state or a store, like the badge, does not wait for anything.
+
 ## View Transitions
 
 Things to try on the page:
@@ -458,15 +511,15 @@ Things to try on the page:
 - Switch the theme: the whole page crossfades, including the shadow roots and the badge.
 - Remove a basket row: the row disappears and the others slide into place. **Reset
   basket** lets you replay it.
-- The counter, palette and panel animate their changes too.
+- The counter, palette, panel and shelf animate their changes too.
 
 How it works:
 
 - `Client/ViewTransitions.fs` wraps every user-triggered `dispatch` in
   `document.startViewTransition`. The initial hydration is not animated.
 - The browser takes its "after" snapshot when the update callback finishes. The islands
-  render synchronously, but the badge is a LitElement and renders a moment later, so the
-  callback waits for the badge's `updateComplete`.
+  render synchronously, but the badge and the meter are LitElements and render a moment
+  later, so the callback waits for their `updateComplete`.
 - All islands share one queue, so quick clicks in different cards run in order.
 - If the user prefers reduced motion, or the browser lacks the API, the update just
   happens without animation.
@@ -554,12 +607,11 @@ docker run --rm -p 8080:8080 litdemo
 `Lit.Server` renders templates, not components. It cannot run a `HookComponent` or a
 `LitElement`, because hooks mean nothing on the server. It can render the view a
 component returns, when that view is a plain function in a shared file. That is how the
-theme badge arrives rendered.
+theme badge and the meter arrive rendered.
 
-There is no `defer-hydration`. A component adopts as soon as it is defined, so its first
-render must come from its own state, its attributes or a store, not from properties a
-parent sets later. A shadow root also cannot be written *inside* a view:
-`toShadowRootNode` goes into the page, at the component's tag.
+It does not work out a component's stylesheet for you, the way `@lit-labs/ssr` does. You
+pass the styles as a string, to `toShadowRootNode` or `Lit.shadowRoot`, and give the same
+string to the component.
 
 With Elmish this costs less than it sounds. The model does the job of `useState` and
 `Cmd` does the job of `useEffect`, so state and effects live in the loop and the view
@@ -573,7 +625,7 @@ an error instead of producing an approximation.
 
 | Package | What it is for |
 |---|---|
-| `Fable.Lit.Unofficial` | lit bindings for Fable, plus `Hydrate.adopt` |
+| `Fable.Lit.Unofficial` | lit bindings for Fable, plus `Hydrate.adopt` and `Hydrate.elements` |
 | `Fable.Lit.Elmish.Unofficial` | `Program.withLitHydrated` |
 | `Fable.LitStore.Unofficial` | `Hook.useStore`, for components that read a store |
 | `Lit.Server.Unofficial` | renders the same templates to HTML on .NET |
