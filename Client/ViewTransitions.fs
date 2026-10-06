@@ -13,8 +13,9 @@ open Fable.Core
         pending = pending.then(async () => {
             const update = async () => {
                 change();
-                // Store islands render immediately; LitElement schedules its render.
-                await Promise.all(Array.from(document.querySelectorAll('bfb-theme-badge'),
+                // Islands render immediately; a LitElement schedules its render, whether
+                // it heard from the store or was handed a property by an island.
+                await Promise.all(Array.from(document.querySelectorAll('bfb-theme-badge, bfb-meter'),
                     element => element.updateComplete));
             };
             if (!document.startViewTransition ||

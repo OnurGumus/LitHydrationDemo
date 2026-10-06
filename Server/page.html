@@ -37,6 +37,7 @@
       html[data-transition="counter"] #counter .value { display: inline-block; view-transition-name: count; }
       html[data-transition="palette"] #palette { view-transition-name: palette; }
       html[data-transition="panel"] #panel { view-transition-name: panel; }
+      html[data-transition="shelf"] #shelf { view-transition-name: shelf; }
       ::view-transition-group(*) { animation-duration: 450ms; animation-timing-function: ease-in-out; }
       html[data-transition="theme"]::view-transition-old(root) { animation: 600ms ease both theme-out; }
       html[data-transition="theme"]::view-transition-new(root) { animation: 600ms ease both theme-in; }
@@ -53,7 +54,7 @@
       <h1>Hydrated. Then animated.</h1>
       <p><a href="https://github.com/OnurGumus/LitHydrationDemo">View the source on GitHub ↗</a></p>
       <p>Switch the theme for a page-wide crossfade. Remove a basket item to see rows
-        glide into place, then reset to replay. Try the counter, palette and panel too.</p>
+        glide into place, then reset to replay. Try the counter, palette, panel and shelf too.</p>
       <p>Animations follow your reduced-motion preference. Browsers without View
         Transitions still update normally.</p>
     </header>
@@ -73,7 +74,9 @@
       knows about the other, and the page is never briefly the wrong colour. A seventh card
       is not an island at all: it is a custom element, which the browser builds and which
       reads that same state from the store. It arrived drawn like the others, inside its
-      own shadow root, and took that over.</p>
+      own shadow root, and took that over. The eighth is an island with a component in
+      it. The island adopts its markup and hands the component its level, and only then
+      does the component take over the shadow root that arrived inside its tag.</p>
     </details>
 
     <!-- One container per component. Each is the element its own markers were written
@@ -101,6 +104,12 @@
          which reads the same store as the two above. The server draws it as well, into a
          shadow root inside its own tag, and the component takes that over. -->
     <bfb-theme-badge>${Badge}</bfb-theme-badge>
+
+    <!-- An island again, with a component in its view. The server draws both: the
+         island's markup here, and inside it the meter's shadow root, in the meter's own
+         tag. The meter is handed its level as a property, which is not in this HTML, so
+         it is marked to wait until the island has hydrated. -->
+    <div id="shelf">${Shelf}</div>
 
     ${ThemePayload}
 

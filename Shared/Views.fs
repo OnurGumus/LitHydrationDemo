@@ -193,3 +193,73 @@ module Panel =
                   <p>Step <b class="step">{model.Step + 1}</b> of {steps.Length}: <b class="name">{steps.[model.Step]}</b></p>
                   <button @click={Ev(fun _ -> dispatch Next)}>next</button>
                 </section>"""
+
+/// A fifth component, and the first with another component inside it.
+///
+/// The card is an island like the first two: an Elmish program adopts its markup. What
+/// it draws the level with is not markup of its own but a component, `<bfb-meter>`,
+/// which has a shadow root and its own styles and no idea that it is inside anything.
+/// The island hands it the level as a property.
+///
+/// Both arrive drawn. `Lit.shadowRoot` below is how the view says what the meter draws:
+/// on the server it writes the meter's shadow root into its tag, and in the browser it
+/// is `Lit.nothing`, because there the meter draws its own. And because a property is
+/// not in the HTML, the server marks the meter `defer-hydration`: it waits until the
+/// island has hydrated and handed it the level, and only then takes its root over.
+module Shelf =
+
+    type Model = { Level: int }
+
+    type Msg =
+        | Less
+        | More
+
+    let capacity = 5
+
+    let init () = { Level = 3 }, Cmd.none
+
+    let update msg model =
+        match msg with
+        | Less -> { model with Level = max 0 (model.Level - 1) }, Cmd.none
+        | More -> { model with Level = min capacity (model.Level + 1) }, Cmd.none
+
+    /// The meter's own stylesheet. A string, because the server writes it into a style
+    /// element in the meter's root, and Client/Meter.fs hands the same text to lit.
+    let meterStyles =
+        """
+        /* The page's rules do not reach in here, and its custom properties do, as in
+           the palette and the badge: the meter is drawn in the page's colours. */
+        :host { display: block; margin: .5rem 0 .75rem; }
+        .cells { display: flex; gap: .3rem; }
+        .cell { width: 1.75rem; height: .9rem; border: 1px solid var(--line);
+                border-radius: 3px; background: var(--field); }
+        .cell.on { background: var(--ink); border-color: var(--ink); }
+        .empty { margin: 0; color: var(--quiet); font: 15px/1.5 system-ui; }
+        """
+
+    let private cell (filled: bool) =
+        html $"""<span class={Lit.classes [ "cell", true; "on", filled ]}></span>"""
+
+    /// What the meter draws: the same function on the server and in Client/Meter.fs.
+    ///
+    /// A different template for an empty shelf, and that is what makes the waiting
+    /// matter. The meter's level is zero until somebody sets it, so a meter that drew
+    /// itself the moment it was defined would draw this branch, against markup the
+    /// server made from the other one.
+    let meter (level: int) =
+        if level = 0 then
+            html $"""<p class="empty">empty</p>"""
+        else
+            let cells = [ for position in 1..capacity -> cell (position <= level) ]
+            html $"""<div class="cells">{Lit.ofList cells}</div>"""
+
+    let view model dispatch =
+        html
+            $"""<section class="card">
+                  <h2>Shelf, with a component inside</h2>
+                  <p>Level <b class="level">{model.Level}</b> of {capacity}. The island keeps the
+                     number and hands it to the meter, which is a component.</p>
+                  <bfb-meter .level={model.Level}>{Lit.shadowRoot meterStyles (meter model.Level)}</bfb-meter>
+                  <button @click={Ev(fun _ -> dispatch Less)}>less</button>
+                  <button @click={Ev(fun _ -> dispatch More)}>more</button>
+                </section>"""

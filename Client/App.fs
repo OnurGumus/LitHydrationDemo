@@ -106,6 +106,17 @@ mount "theme-reader" (fun model _ -> Theme.reader model)
 Hydrate.elements ()
 ThemeBadge.register ()
 
+// The fifth program, and the one with a component in its view. Nothing here says so: it
+// is mounted exactly like the first two. The meter inside it is a component, so it
+// starts itself -- but not until this program's first render has adopted the markup
+// around it and handed it its level, because the server told it to wait for that.
+Program.mkProgram Views.Shelf.init Views.Shelf.update (fun model dispatch ->
+    Views.Shelf.view model (ViewTransitions.dispatch "shelf" dispatch))
+|> Program.withLitHydrated "shelf"
+|> Program.run
+
+Meter.register ()
+
 // What a theme actually has to do, which is neither island's business and certainly not
 // the store's: paint the page, and remember the choice so the *server* can paint it next
 // time. A subscriber, in the file where this app touches the document.
