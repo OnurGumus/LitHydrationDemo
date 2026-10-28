@@ -117,6 +117,17 @@ Program.mkProgram Views.Shelf.init Views.Shelf.update (fun model dispatch ->
 
 Meter.register ()
 
+// The board, mounted like the first two. Its buttons go through the transition queue
+// like every other island's. A drop goes through it as well, and puts the card down
+// inside the update: by then the browser has its picture of the card where the pointer
+// left it, so the card glides from there into its lane.
+Program.mkProgram Kanban.init Kanban.update (fun model dispatch ->
+    let drop = ViewTransitions.dispatch "kanban" (fun msg -> Drag.release (); dispatch msg)
+    let grab id = Drag.grab (fun lane index -> drop (Kanban.Move(id, Kanban.laneOf lane, index)))
+    Kanban.view grab model (ViewTransitions.dispatch "kanban" dispatch))
+|> Program.withLitHydrated "kanban"
+|> Program.run
+
 // What a theme actually has to do, which is neither island's business and certainly not
 // the store's: paint the page, and remember the choice so the *server* can paint it next
 // time. A subscriber, in the file where this app touches the document.

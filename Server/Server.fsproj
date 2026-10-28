@@ -6,6 +6,7 @@
   <ItemGroup>
     <Compile Include="..\Shared\Views.fs" Link="Views.fs" />
     <Compile Include="..\Shared\Theme.fs" Link="Theme.fs" />
+    <Compile Include="..\Shared\Kanban.fs" Link="Kanban.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

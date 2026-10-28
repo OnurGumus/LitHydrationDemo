@@ -6,8 +6,8 @@
 https://github.com/user-attachments/assets/58971b1d-48a0-4a2a-9371-1a89bdc73131
 
 
-> The video is older than the page. It was recorded before the shelf card existed and
-> before the server rendered the theme badge. This README describes the page as it is now.
+> The video is older than the page. It was recorded before the shelf card and the board
+> existed, and before the server rendered the theme badge. This README describes the page as it is now.
 
 A small demo of server-side rendering in F# with [Fable](https://fable.io) and
 [lit](https://lit.dev). In short:
@@ -25,7 +25,7 @@ client at build time.
 
 - [The one idea](#the-one-idea) explains the whole demo in two minutes. If you read one
   section, read that one.
-- [The tour](#the-tour-seven-lessons) is seven short lessons, one for each thing the page
+- [The tour](#the-tour-eight-lessons) is eight short lessons, one for each thing the page
   shows. Each builds on the one before, and each has something to try in the browser
   console.
 - The [cheat sheet](#cheat-sheet) says which function to use for which job.
@@ -121,9 +121,9 @@ So every card on the page is, underneath, a way of getting the same data to both
 | Only the server knows it | Theme switch, Theme reader, Theme badge | The server writes it into the page, and a store reads it once. |
 | A parent hands it over | The meter inside the shelf | The component waits until its parent has hydrated. |
 
-## The tour: seven lessons
+## The tour: eight lessons
 
-The page has eight cards. The two theme islands share a lesson, so there are seven. They
+The page has nine cards. The two theme islands share a lesson, so there are eight. They
 are taken in the order that builds up, which is almost the order on the page (the theme
 switch sits at the top of the page, and comes fifth here).
 
@@ -136,6 +136,7 @@ switch sits at the top of the page, and comes fifth here).
 | [5](#lesson-5-theme-state-only-the-server-knows) | Theme switch, Theme reader | State only the server knows, shared through a store |
 | [6](#lesson-6-theme-badge-a-real-component) | Theme badge | A real lit component, rendered by the server |
 | [7](#lesson-7-shelf-a-component-inside-an-island) | Shelf | A component inside an island |
+| [8](#lesson-8-kanban-motion-only-in-the-browser) | Kanban | Motion only in the browser, and browser code handed to a shared view |
 
 Each lesson is laid out the same way: **what you see**, **the idea**, **the code**,
 something to **try**, anything to **watch out** for, and a one-line takeaway.
@@ -750,6 +751,90 @@ component. Production builds stay quiet.
 > **Takeaway.** A component inside an island arrives rendered when the view says what it
 > draws. If the island hands it a property, it waits for the island.
 
+### Lesson 8. Kanban: motion only in the browser
+
+**What you see.** A board with three lanes. Drag a card to another lane, or use its arrows.
+Cards glide between lanes, pop in when added and fade out when removed. **Undo** steps
+back through earlier boards.
+
+**The idea.** The server draws the board standing still. It is an island like the counter:
+`Kanban.init` is a fixed board, the server renders it, and the browser adopts it.
+Everything that moves belongs to the browser, and none of it is in the model:
+
+- **Gliding, arriving and leaving** are View Transitions, which is CSS. Each card gets a
+  transition name of its own, so the browser follows each card to wherever it went, even
+  into another lane.
+- **Dragging** is pointer events in `Client/Drag.fs`. While you drag, only the card's
+  `transform` changes. The program hears nothing until you drop, and then gets one
+  message: `Move (card, lane, position)`.
+
+The shared view needs a pointer-down handler on each card, but a handler is browser code,
+and `Shared/Kanban.fs` also compiles on .NET. So the view does not make the handler. It is
+handed one.
+
+**The code.** The view takes the handler as its first argument:
+
+```fsharp
+// Shared/Kanban.fs
+let view (grab: int -> EvHandler) model dispatch = ...
+//   each card:  <article class="kcard" ... @pointerdown={grab card.Id}>
+```
+
+The server hands it one that does nothing, which suits the server: it drops handlers
+anyway.
+
+```fsharp
+// Server/Program.fs
+.Kanban(toHydratableNode (Kanban.view (fun _ -> Ev ignore) kanban ignore))
+```
+
+The browser hands it the real one, and puts the drop through the same transition queue as
+every other click:
+
+```fsharp
+// Client/App.fs
+let drop = ViewTransitions.dispatch "kanban" (fun msg -> Drag.release (); dispatch msg)
+let grab id = Drag.grab (fun lane index -> drop (Kanban.Move(id, Kanban.laneOf lane, index)))
+Kanban.view grab model (ViewTransitions.dispatch "kanban" dispatch)
+```
+
+`Drag.release` is the trick behind the glide. A dropped card stays where the pointer left
+it until `release` runs, and `release` runs inside the transition's update. So the
+browser's "before" picture has the card under the pointer and its "after" picture has the
+card in its lane, and the browser animates between the two.
+
+**Try it.**
+
+```js
+const board = () => [...document.querySelectorAll('#kanban [data-lane]')].map(lane => lane.dataset.lane + ': ' + [...lane.querySelectorAll('[data-card]')].map(c => c.dataset.card).join(','))
+board()                                                                  // ['backlog: 1,2', 'progress: 3', 'shipped: 4']
+document.querySelector('#kanban [data-card="1"] [aria-label="Move right"]').click()
+board()                                                                  // ['backlog: 2', 'progress: 3,1', 'shipped: 4']
+document.querySelector('#kanban .toolbar button:nth-child(4)').click()   // undo
+board()                                                                  // back where it started
+const firstCard = document.querySelector('#kanban .kcard')
+getComputedStyle(firstCard).viewTransitionName                           // "none"
+```
+
+The last line says `none` because a card only has its transition name while the board is
+animating. The basket rows work the same way.
+
+**Watch out.**
+
+- Keep randomness and the clock out of `init`, or the browser will not start from the
+  board the server drew. **Shuffle** is random, and that is fine: it lives in `update`,
+  and `update` only runs in the browser, after the board has been adopted.
+- Do not give the lanes transition names. A named lane becomes a picture of its own, the
+  browser does not promise to stack those pictures in page order, and a lane's background
+  can cover a card flying into it. Unnamed lanes are part of the page underneath every
+  card.
+- `Lit.ofList` reuses elements: after a move, the element that showed card 1 may be
+  showing card 2. So `Drag.fs` clears whatever it set on an element before the render, and
+  finds the dropped card's picture in the transition by its name, not by its element.
+
+> **Takeaway.** The server draws the state. The browser draws the motion, from CSS and
+> from handlers the shared view is handed.
+
 ## Cheat sheet
 
 Which function to use for which job:
@@ -764,6 +849,7 @@ Which function to use for which job:
 | A component inside a view | `Lit.shadowRoot styles view`, first thing inside its tag | `Hydrate.elements ()`, once |
 | State only the server knows | JSON in a `<script type="application/json">` | A store that reads it once |
 | An island that must know when it leaves the page | A container whose tag has a dash in it | `Lit.trackConnection ("tag", handler)` |
+| A view that needs a browser-only handler | Pass the view one that does nothing: `fun _ -> Ev ignore` | Pass the view the real one |
 
 And the three ways to keep [the one rule](#the-one-rule):
 
@@ -779,6 +865,8 @@ Things to try on the page:
 - Remove a basket row: the row disappears and the others slide into place. **Reset
   basket** lets you replay it.
 - The counter, palette, panel and shelf animate their changes too.
+- Drag a card on the board, or use its arrows: it glides into its lane. Add or remove one
+  and it pops in or fades out.
 
 How it works:
 
@@ -792,6 +880,9 @@ How it works:
   happens without animation.
 - The CSS in `Server/page.html` gives basket rows their own transition names only during a
   basket transition. A theme transition captures the whole page as one image.
+- Board cards are named the same way, one name per card, during a board transition.
+  A card with only an "after" picture has just arrived and pops in; one with only a
+  "before" picture has just left and fades out.
 
 All browser-specific code is in the client project, so the shared views still compile on
 .NET.
@@ -804,11 +895,13 @@ All browser-specific code is in the client project, so the shared views still co
 |---|---|
 | `Shared/Views.fs` | The five Elmish islands (Counter, Basket, Palette, Panel, Shelf), and what the meter draws |
 | `Shared/Theme.fs` | The theme state, its `update`, the views that show it, and what the badge draws |
+| `Shared/Kanban.fs` | The board: its model, `update` and view |
 | `Client/App.fs` | Starts everything in the browser: one program per island |
 | `Client/ThemeStore.fs` | The shared theme store, and the one DOM read that starts it |
 | `Client/ThemeBadge.fs` | The component that reads the store |
 | `Client/Meter.fs` | The component inside the shelf island |
 | `Client/ViewTransitions.fs` | Wraps updates in a view transition |
+| `Client/Drag.fs` | Picking a board card up and putting it down |
 | `Server/Program.fs` | A minimal ASP.NET app that renders every view into the page |
 | `Server/page.html` | The page shell: an `HtmlTypeProvider` template with one container per card |
 
@@ -912,6 +1005,7 @@ compilers can render.
 | `Fable.Lit.Elmish.Unofficial` | `Program.withLitHydrated` |
 | `Fable.LitStore.Unofficial` | `Hook.useStore`, for components that read a store |
 | `Lit.Server.Unofficial` | renders the same templates to HTML on .NET |
+| `Fable.Browser.Css` | typed `style` for the drag code |
 | `HtmlTypeProvider` | typed HTML page templates |
 | `Microsoft.AspNetCore.SpaServices.Extensions` | dev only: proxies to the dev server |
 

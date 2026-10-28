@@ -150,6 +150,7 @@ let main args =
                 let palette, _ = Views.Palette.init ()
                 let panel, _ = Views.Panel.init ()
                 let shelf, _ = Views.Shelf.init ()
+                let kanban, _ = Kanban.init ()
 
                 // Built once, rendered twice, and written down once. Two islands
                 // rendering the same value is the whole reason it has to be written
@@ -182,6 +183,9 @@ let main args =
                         // the view says what the component draws, and that is written
                         // into the component's tag as its shadow root.
                         .Shelf(toHydratableNode (Views.Shelf.view shelf ignore))
+                        // Nothing to pick a card up with here: the board is drawn still,
+                        // and dragging is the browser's.
+                        .Kanban(toHydratableNode (Kanban.view (fun _ -> Ev ignore) kanban ignore))
                         .ThemePayload(themePayload theme)
                         // The attribute the stylesheet keys off, written before anything
                         // is sent: this is the difference between a page that is dark and

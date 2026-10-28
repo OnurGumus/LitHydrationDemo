@@ -29,6 +29,33 @@
       button:hover { border-color: var(--ink); }
       button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
       a { color: inherit; text-underline-offset: .2em; }
+      button:disabled { opacity: .4; cursor: default; }
+      button:disabled:hover { border-color: var(--line); }
+
+      .board { max-width: 60rem; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-bottom: .75rem; }
+      .tally { margin-left: auto; color: var(--quiet); }
+      .lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+      @media (max-width: 40rem) { .lanes { grid-template-columns: 1fr; } }
+      .lane { --accent: #3b82c4; border: 1px dashed var(--line); border-radius: 10px; padding: .5rem;
+              min-height: 14rem; background: var(--field); }
+      .lane.progress { --accent: #c9952b; }
+      .lane.shipped { --accent: #3f9d6e; }
+      .lane[data-over] { border-color: var(--accent); border-style: solid; }
+      .lane > header { display: flex; align-items: center; gap: .5rem; padding: .1rem .25rem .5rem; }
+      .lane h3 { margin: 0; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+      .count { font-size: .8rem; color: var(--quiet); }
+      button.icon { padding: 0 .45rem; border-color: transparent; background: none; color: var(--quiet); }
+      .lane > header button.icon { margin-left: auto; }
+      .kcard { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+               border-radius: 8px; padding: .4rem .5rem .3rem .75rem; margin-bottom: .5rem;
+               cursor: grab; touch-action: none; user-select: none; }
+      .kcard[data-dragging] { position: relative; z-index: 2; cursor: grabbing;
+                              box-shadow: 0 12px 28px rgb(0 0 0 / .25); }
+      .kcard header, .kcard footer { display: flex; justify-content: space-between; align-items: center; }
+      .kcard footer { justify-content: flex-end; }
+      .kid { font-size: .75rem; color: var(--quiet); }
+      .kcard p { margin: .1rem 0; }
 
       /* Names are enabled only for the interaction being animated. Theme changes
          use the single root snapshot, including all shadow-root contents. */
@@ -38,7 +65,17 @@
       html[data-transition="palette"] #palette { view-transition-name: palette; }
       html[data-transition="panel"] #panel { view-transition-name: panel; }
       html[data-transition="shelf"] #shelf { view-transition-name: shelf; }
+      /* Each card is named for itself, so the browser follows it across lanes. A card
+         with only a new picture has just arrived, and one with only an old one has
+         just left. The lanes are not named: a named lane is a picture of its own, drawn
+         in no promised order against the cards, and its background can cover a card
+         flying into it. Unnamed, they are part of the page underneath. */
+      html[data-transition="kanban"] #kanban .kcard { view-transition-name: var(--card-transition); view-transition-class: kcard; }
       ::view-transition-group(*) { animation-duration: 450ms; animation-timing-function: ease-in-out; }
+      ::view-transition-new(.kcard):only-child { animation: 300ms ease-out both card-in; }
+      ::view-transition-old(.kcard):only-child { animation: 250ms ease-in both card-out; }
+      @keyframes card-in { from { opacity: 0; transform: scale(.9) translateY(-.5rem); } }
+      @keyframes card-out { to { opacity: 0; transform: scale(.9); } }
       html[data-transition="theme"]::view-transition-old(root) { animation: 600ms ease both theme-out; }
       html[data-transition="theme"]::view-transition-new(root) { animation: 600ms ease both theme-in; }
       @keyframes theme-out { to { opacity: 0; } }
@@ -54,7 +91,8 @@
       <h1>Hydrated. Then animated.</h1>
       <p><a href="https://github.com/OnurGumus/LitHydrationDemo">View the source on GitHub ↗</a></p>
       <p>Switch the theme for a page-wide crossfade. Remove a basket item to see rows
-        glide into place, then reset to replay. Try the counter, palette, panel and shelf too.</p>
+        glide into place, then reset to replay. Try the counter, palette, panel and shelf too,
+        and drag cards across the board at the bottom.</p>
       <p>Animations follow your reduced-motion preference. Browsers without View
         Transitions still update normally.</p>
     </header>
@@ -76,7 +114,9 @@
       reads that same state from the store. It arrived drawn like the others, inside its
       own shadow root, and took that over. The eighth is an island with a component in
       it. The island adopts its markup and hands the component its level, and only then
-      does the component take over the shadow root that arrived inside its tag.</p>
+      does the component take over the shadow root that arrived inside its tag. The ninth is a
+      board, an island like the first two that the server draws standing still. Dragging its
+      cards, and their gliding from lane to lane, belong to the browser alone.</p>
     </details>
 
     <!-- One container per component. Each is the element its own markers were written
@@ -110,6 +150,10 @@
          tag. The meter is handed its level as a property, which is not in this HTML, so
          it is marked to wait until the island has hydrated. -->
     <div id="shelf">${Shelf}</div>
+
+    <!-- An island like the first two, drawn still. Everything that moves on it is the
+         browser's: the drag, and the transitions in the stylesheet above. -->
+    <div id="kanban">${Kanban}</div>
 
     ${ThemePayload}
 

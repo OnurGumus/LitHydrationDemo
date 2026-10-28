@@ -5,13 +5,16 @@
   <ItemGroup>
     <Compile Include="..\Shared\Views.fs" Link="Views.fs" />
     <Compile Include="..\Shared\Theme.fs" Link="Theme.fs" />
+    <Compile Include="..\Shared\Kanban.fs" Link="Kanban.fs" />
     <Compile Include="ThemeStore.fs" />
     <Compile Include="ViewTransitions.fs" />
     <Compile Include="ThemeBadge.fs" />
     <Compile Include="Meter.fs" />
+    <Compile Include="Drag.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Fable.Browser.Css" Version="2.5.0" />
     <PackageReference Include="Fable.Lit.Elmish.Unofficial" Version="2.21.3" />
     <PackageReference Include="Fable.Lit.Unofficial" Version="2.21.3" />
     <PackageReference Include="Fable.LitStore.Unofficial" Version="2.21.3" />
