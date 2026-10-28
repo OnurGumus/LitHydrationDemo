@@ -979,7 +979,21 @@ page still renders immediately; only the request for the script waits.
 the element it renders into. A hot update re-runs the module, the module mounts again, and
 the second mount finds the first: it stops it, takes its model, and renders. The one line
 that opts in is `HMR.acceptSelf()` in `Client/App.fs`, which makes the module accept its
-own updates instead of reloading the page.
+own updates instead of reloading the page. Since Fable.Lit 2.21.4 the model it takes is
+first rebuilt in the new code's types, so its unions and records still compare equal
+(before, editing `Shared/Kanban.fs` emptied every lane until a reload), and a component
+whose module runs again draws with the new code. A model that no longer fits, such as one
+missing a field you just added, is dropped for `init` with a warning in the console.
+
+**Everything else is replaced, not added to.** A hot update runs all of `Client/App.fs`
+again, and only the programs know how to take over from the last run. The rest (the
+panel's connection tracker, the theme islands' store subscriptions, and the subscriber
+that paints the page) would be set up a second time beside the first, and the theme
+islands would try to adopt markup that is no longer the server's. So `App.fs` keeps each
+of them on a node with `replaceOn`: a run disposes what the last one left there, and the
+theme islands render instead of adopting when there was something. That is why the
+console shows `bfb-panel disconnected` and `bfb-panel connected` once each on every hot
+update: the old tracker letting go, and the new one finding the panel already there.
 
 **A dev server is needed, not just a rebuilt bundle.** Vite gives every version of the
 code the *same* copy of lit. Rebuilding a self-contained bundle and importing it again

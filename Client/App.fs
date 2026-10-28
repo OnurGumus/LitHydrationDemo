@@ -4,6 +4,7 @@ module App
 open Browser
 open Elmish
 open Fable
+open Fable.Core.JsInterop
 open Lit
 open Lit.Elmish
 
@@ -14,6 +15,24 @@ open Lit.Elmish
 //
 // Compiled out of a release build, and inert with no dev server behind the page.
 HMR.acceptSelf()
+
+// What is not a program has to be ready for that by hand. A store subscription or a
+// connection tracker set up a second time runs beside the one the last run left, and
+// both answer every change; a view adopted a second time finds lit's DOM where the
+// server's markup was, and fails. So everything this file sets up besides its programs
+// is kept on a node, the way Program.withLitHydrated keeps its program on the element:
+// the page is the one place two runs of this file can meet, since a value held in this
+// module is replaced along with it. A run disposes what the last one left under the same
+// key, and `start` is told whether there was anything, which is how it knows it is not
+// the first.
+let private replaceOn (key: string) (start: bool -> System.IDisposable) (node: #Types.Node) =
+    let previous: System.IDisposable = node?(key)
+    let again = not (isNull previous)
+
+    if again then
+        previous.Dispose()
+
+    node?(key) <- start again
 
 // Two independent loops on one page. Neither knows about the other; each adopts the
 // container its own markers were written into, and renders normally from then on.
@@ -50,9 +69,12 @@ Program.mkProgram Views.Palette.init Views.Palette.update (fun model dispatch ->
 // departure, so the two halves cannot drift apart. A timer or a socket would live here;
 // this only says so out loud.
 //
-// Held for as long as the page is. In a component this is what you would return from
-// Hook.useEffectOnce, so that leaving the page stops the listening as well.
-let private panelConnection =
+// Held for as long as the page is, on the document, so that a run of this file after a
+// hot update replaces it rather than adding a second. In a component this is what you
+// would return from Hook.useEffectOnce, so that leaving the page stops the listening as
+// well.
+document
+|> replaceOn "__panelConnection" (fun _ ->
     Lit.trackConnection (
         "bfb-panel",
         fun _ ->
@@ -60,7 +82,7 @@ let private panelConnection =
 
             { new System.IDisposable with
                 member _.Dispose() = console.log "bfb-panel disconnected" }
-    )
+    ))
 
 // The fourth mounts on the host, not on its shadow root: the shadow root here is a
 // static frame, and what needs driving is the light content the slots display.
@@ -83,14 +105,24 @@ let private mount (id: string) (view: Theme.Model -> (Theme.Msg -> unit) -> Temp
     if isNull el then
         failwith $"Cannot find element with id {id}"
 
-    // Subscribing hands back the current value and reports every later one to the
-    // callback, so the first render is the adoption and the rest are ordinary renders.
     let dispatch = ViewTransitions.dispatch "theme" ThemeStore.dispatch
-    let current, _ =
-        ThemeStore.store
-        |> Store.subscribeImmediate (fun model -> Lit.render el (view model dispatch))
 
-    Hydrate.adopt el (view current dispatch)
+    el
+    |> replaceOn "__themeIsland" (fun again ->
+        // Subscribing hands back the current value and reports every later one to the
+        // callback, so the first render is the adoption and the rest are ordinary renders.
+        let current, subscription =
+            ThemeStore.store
+            |> Store.subscribeImmediate (fun model -> Lit.render el (view model dispatch))
+
+        // After a hot update the markup is the last run's render, not the server's, so
+        // this run renders over it like any later change.
+        if again then
+            Lit.render el (view current dispatch)
+        else
+            Hydrate.adopt el (view current dispatch)
+
+        subscription)
 
 mount "theme-switch" Theme.switch
 mount "theme-reader" (fun model _ -> Theme.reader model)
@@ -131,8 +163,12 @@ KCard.register ()
 // What a theme actually has to do, which is neither island's business and certainly not
 // the store's: paint the page, and remember the choice so the *server* can paint it next
 // time. A subscriber, in the file where this app touches the document.
-ThemeStore.store
-|> Store.subscribeImmediate (fun model ->
-    document.documentElement.setAttribute ("data-theme", Theme.name model)
-    document.cookie <- $"{Theme.Cookie}={Theme.name model}; path=/; max-age=31536000")
-|> ignore
+document
+|> replaceOn "__themePainter" (fun _ ->
+    let _, subscription =
+        ThemeStore.store
+        |> Store.subscribeImmediate (fun model ->
+            document.documentElement.setAttribute ("data-theme", Theme.name model)
+            document.cookie <- $"{Theme.Cookie}={Theme.name model}; path=/; max-age=31536000")
+
+    subscription)
