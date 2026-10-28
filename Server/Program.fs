@@ -183,8 +183,8 @@ let main args =
                         // the view says what the component draws, and that is written
                         // into the component's tag as its shadow root.
                         .Shelf(toHydratableNode (Views.Shelf.view shelf ignore))
-                        // Nothing to pick a card up with here: the board is drawn still,
-                        // and dragging is the browser's.
+                        // Nothing to press a card with here: the board is drawn still,
+                        // and reading the pointer is the browser's.
                         .Kanban(toHydratableNode (Kanban.view (fun _ -> Ev ignore) kanban ignore))
                         .ThemePayload(themePayload theme)
                         // The attribute the stylesheet keys off, written before anything

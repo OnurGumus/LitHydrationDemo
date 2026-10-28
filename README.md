@@ -759,25 +759,27 @@ back through earlier boards.
 
 **The idea.** The server draws the board standing still. It is an island like the counter:
 `Kanban.init` is a fixed board, the server renders it, and the browser adopts it.
-Everything that moves belongs to the browser, and none of it is in the model:
+Everything that moves happens in the browser:
 
 - **Gliding, arriving and leaving** are View Transitions, which is CSS. Each card gets a
   transition name of its own, so the browser follows each card to wherever it went, even
   into another lane.
-- **Dragging** is pointer events in `Client/Drag.fs`. While you drag, only the card's
-  `transform` changes. The program hears nothing until you drop, and then gets one
-  message: `Move (card, lane, position)`.
+- **Dragging** is an ordinary Elmish loop. The model holds the drag: which card, how far it
+  has moved, and the lane it would land in. Every pointer move is a message, and the view
+  draws the card where the pointer is. The server's model never has a drag in it, so
+  it always draws the board still.
 
-The shared view needs a pointer-down handler on each card, but a handler is browser code,
-and `Shared/Kanban.fs` also compiles on .NET. So the view does not make the handler. It is
-handed one.
+Two things in a drag only the browser can do: read the pointer, and work out what is
+under it. `Shared/Kanban.fs` also compiles on .NET, so it cannot do either. The browser
+does them in `Client/Drag.fs` and reports the results as messages.
 
-**The code.** The view takes the handler as its first argument:
+**The code.** The view is handed the pointer-down handler, because only the browser can
+read the event:
 
 ```fsharp
 // Shared/Kanban.fs
-let view (grab: int -> EvHandler) model dispatch = ...
-//   each card:  <article class="kcard" ... @pointerdown={grab card.Id}>
+let view (press: int -> EvHandler) model dispatch = ...
+//   each card:  <article class="kcard" ... @pointerdown={press card.Id}>
 ```
 
 The server hands it one that does nothing, which suits the server: it drops handlers
@@ -788,20 +790,25 @@ anyway.
 .Kanban(toHydratableNode (Kanban.view (fun _ -> Ev ignore) kanban ignore))
 ```
 
-The browser hands it the real one, and puts the drop through the same transition queue as
-every other click:
+The browser hands it the real one, and listens to the page only while a card is pressed,
+with a subscription:
 
 ```fsharp
 // Client/App.fs
-let drop = ViewTransitions.dispatch "kanban" (fun msg -> Drag.release (); dispatch msg)
-let grab id = Drag.grab (fun lane index -> drop (Kanban.Move(id, Kanban.laneOf lane, index)))
-Kanban.view grab model (ViewTransitions.dispatch "kanban" dispatch)
+Program.mkProgram Kanban.init Kanban.update (fun model dispatch ->
+    Kanban.view (Drag.press dispatch) model (ViewTransitions.dispatch "kanban" dispatch))
+|> Program.withSubscription (fun model ->
+    match model.Drag with
+    | Some drag -> [ [ "drag"; string drag.Moving ], fun dispatch -> Drag.listen drag (ViewTransitions.dispatch "kanban" dispatch) dispatch ]
+    | None -> [])
 ```
 
-`Drag.release` is the trick behind the glide. A dropped card stays where the pointer left
-it until `release` runs, and `release` runs inside the transition's update. So the
-browser's "before" picture has the card under the pointer and its "after" picture has the
-card in its lane, and the browser animates between the two.
+Pointer moves go straight to the program, with no transition. The drop goes through the
+transition queue like a button click, and that is the trick behind the glide. When the
+transition starts, the browser takes its "before" picture with the card still under the
+pointer. Then one update ends the drag and moves the card, so the "after" picture has it
+in its lane, and the browser animates between the two. A cancelled drag (**Escape**, or a
+drop outside the lanes) glides back the same way.
 
 **Try it.**
 
@@ -828,12 +835,19 @@ animating. The basket rows work the same way.
   browser does not promise to stack those pictures in page order, and a lane's background
   can cover a card flying into it. Unnamed lanes are part of the page underneath every
   card.
-- `Lit.ofList` reuses elements: after a move, the element that showed card 1 may be
-  showing card 2. So `Drag.fs` clears whatever it set on an element before the render, and
-  finds the dropped card's picture in the transition by its name, not by its element.
+- The dropped card has to pass over the lane's other cards as it glides, not under them.
+  The view marks it with `data-dropped`, and one rule in the stylesheet lifts its picture
+  above the rest of the transition. The mark comes from the model, not from an element,
+  because `Lit.ofList` reuses elements: after a move, the element that showed card 1 may
+  be showing card 2.
+- The subscription's name includes whether the press has become a drag. Elmish starts a
+  subscription again only when its name changes, and the listener has to know which kind
+  of release it is: a click goes straight to the program, a drop goes through the
+  transition.
 
-> **Takeaway.** The server draws the state. The browser draws the motion, from CSS and
-> from handlers the shared view is handed.
+> **Takeaway.** The server draws the state. The browser draws the motion: from CSS, and
+> from a drag that is ordinary model and messages, fed by handlers the shared view is
+> handed.
 
 ## Cheat sheet
 
@@ -901,7 +915,7 @@ All browser-specific code is in the client project, so the shared views still co
 | `Client/ThemeBadge.fs` | The component that reads the store |
 | `Client/Meter.fs` | The component inside the shelf island |
 | `Client/ViewTransitions.fs` | Wraps updates in a view transition |
-| `Client/Drag.fs` | Picking a board card up and putting it down |
+| `Client/Drag.fs` | Reading the pointer for a board drag, and what is under it |
 | `Server/Program.fs` | A minimal ASP.NET app that renders every view into the page |
 | `Server/page.html` | The page shell: an `HtmlTypeProvider` template with one container per card |
 
@@ -1005,7 +1019,6 @@ compilers can render.
 | `Fable.Lit.Elmish.Unofficial` | `Program.withLitHydrated` |
 | `Fable.LitStore.Unofficial` | `Hook.useStore`, for components that read a store |
 | `Lit.Server.Unofficial` | renders the same templates to HTML on .NET |
-| `Fable.Browser.Css` | typed `style` for the drag code |
 | `HtmlTypeProvider` | typed HTML page templates |
 | `Microsoft.AspNetCore.SpaServices.Extensions` | dev only: proxies to the dev server |
 

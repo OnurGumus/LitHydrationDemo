@@ -3,10 +3,11 @@
 /// Compiled twice like Views.fs, and adopted the same way: the server draws the board
 /// from `init`, still, and the browser adopts it. Everything that moves is the browser's
 /// alone. Cards glide between lanes, and come and go, on the page's View Transitions,
-/// which is CSS. Dragging is browser code too, and the view never sees it: it is handed
-/// `grab`, which makes the handler a card is picked up with. The browser hands it
-/// Client/Drag.fs; the server hands it one that does nothing, because the server drops
-/// handlers anyway.
+/// which is CSS. A drag is part of the model like everything else: where the card is,
+/// which lane it is over, and the drop. The browser does what only it can, and reports
+/// it as messages: it reads the pointer, and works out what is under it (Client/Drag.fs).
+/// The server draws `Drag = None`, and hands the view a `press` that does nothing,
+/// because the server drops handlers anyway.
 module Kanban
 
 open Elmish
@@ -19,19 +20,42 @@ type Lane =
 
 type Card = { Id: int; Title: string; Lane: Lane }
 
+/// A card under the pointer, from press to drop. It is a drag once it has moved.
+type Drag =
+    { Card: int
+      Pointer: float
+      /// Where the press started.
+      X: float
+      Y: float
+      /// How far the pointer has gone since.
+      Dx: float
+      Dy: float
+      Moving: bool
+      /// The lane it would land in, and how many of that lane's other cards are above it.
+      Target: (Lane * int) option }
+
 /// `History` is the earlier boards, newest first, so undo is taking the head.
+/// `Dropped` is the card that landed last, while it is landing.
 type Model =
     { Cards: Card list
       NextId: int
-      History: Card list list }
+      History: Card list list
+      Drag: Drag option
+      Dropped: int option }
 
 type Msg =
     | Add of Lane
     | Remove of int
     /// A card's arrow: one lane left (-1) or right (+1).
     | Step of int * int
-    /// A drop: the card, the lane, and how many of that lane's cards it lands after.
-    | Move of int * Lane * int
+    /// The card, the pointer and where it was pressed.
+    | Press of int * float * float * float
+    /// Where the pointer is, and where the card would land if dropped there.
+    | Point of float * float * (Lane * int) option
+    /// Puts the card down: in the lane it is over, or back where it came from.
+    | Drop
+    /// Puts the card back where it came from.
+    | Cancel
     | Shuffle
     | Clear
     | Undo
@@ -72,7 +96,9 @@ let private card id lane =
 let init () =
     { Cards = [ card 1 Backlog; card 2 Backlog; card 3 InProgress; card 4 Shipped ]
       NextId = 5
-      History = [] },
+      History = []
+      Drag = None
+      Dropped = None },
     Cmd.none
 
 /// Only `update` shuffles, and `update` only ever runs in the browser, after the board
@@ -95,12 +121,17 @@ let private place id lane index cards =
 /// A new board, with the old one kept for undo. A change that changes nothing keeps
 /// nothing, so undo never steps back to the board you are looking at.
 let private commit model cards =
+    let model = { model with Dropped = None }
+
     if cards = model.Cards then
         model
     else
         { model with
             Cards = cards
             History = List.truncate 50 (model.Cards :: model.History) }
+
+/// A press is a drag only once it has moved this far, so a click stays a click.
+let private threshold = 4.0
 
 let update msg model =
     match msg with
@@ -117,7 +148,48 @@ let update msg model =
             else
                 commit model (place id lanes.[target] System.Int32.MaxValue model.Cards), Cmd.none
         | None -> model, Cmd.none
-    | Move(id, lane, index) -> commit model (place id lane index model.Cards), Cmd.none
+    | Press(id, pointer, x, y) when model.Drag.IsNone ->
+        { model with
+            Drag =
+                Some
+                    { Card = id
+                      Pointer = pointer
+                      X = x
+                      Y = y
+                      Dx = 0.0
+                      Dy = 0.0
+                      Moving = false
+                      Target = None } },
+        Cmd.none
+    | Press _ -> model, Cmd.none
+    | Point(x, y, target) ->
+        match model.Drag with
+        | Some drag ->
+            let dx, dy = x - drag.X, y - drag.Y
+
+            { model with
+                Drag =
+                    Some
+                        { drag with
+                            Dx = dx
+                            Dy = dy
+                            Moving = drag.Moving || sqrt (dx * dx + dy * dy) >= threshold
+                            Target = target } },
+            Cmd.none
+        | None -> model, Cmd.none
+    | Drop
+    | Cancel ->
+        match model.Drag with
+        | Some({ Moving = true } as drag) ->
+            let cards =
+                match msg, drag.Target with
+                | Drop, Some(lane, index) -> place drag.Card lane index model.Cards
+                | _ -> model.Cards
+
+            // The one card that lands over the others as it glides: the stylesheet lifts
+            // a card with `data-dropped` above the rest of the transition.
+            { commit model cards with Drag = None; Dropped = Some drag.Card }, Cmd.none
+        | _ -> { model with Drag = None }, Cmd.none
     | Shuffle ->
         model.Cards
         |> List.map (fun c -> random.Next(), { c with Lane = lanes.[random.Next lanes.Length] })
@@ -128,17 +200,30 @@ let update msg model =
     | Clear -> commit model [], Cmd.none
     | Undo ->
         match model.History with
-        | previous :: earlier -> { model with Cards = previous; History = earlier }, Cmd.none
+        | previous :: earlier -> { model with Cards = previous; History = earlier; Dropped = None }, Cmd.none
         | [] -> model, Cmd.none
 
 /// `--card-transition` is the card's name while the board is animating: one name per
 /// card, so the browser can follow each one to wherever it went.
-let private cardView grab dispatch (card: Card) =
+let private cardView press (drag: Drag option) dropped dispatch (card: Card) =
     let position = List.findIndex ((=) card.Lane) lanes
 
+    // Only the card being dragged moves, and only the transform: it stays in its lane
+    // until the drop, so nothing else on the board moves with it.
+    let lifted =
+        match drag with
+        | Some drag when drag.Moving && drag.Card = card.Id -> Some drag
+        | _ -> None
+
+    let style =
+        match lifted with
+        | Some drag -> $"--card-transition: kanban-{card.Id}; transform: translate({drag.Dx}px, {drag.Dy}px) rotate(2deg)"
+        | None -> $"--card-transition: kanban-{card.Id}"
+
     html
-        $"""<article class="kcard" data-card={card.Id} style={"--card-transition: kanban-" + string card.Id}
-                     @pointerdown={grab card.Id}>
+        $"""<article class="kcard" data-card={card.Id} style={style}
+                     ?data-dragging={lifted.IsSome} ?data-dropped={dropped = Some card.Id}
+                     @pointerdown={press card.Id}>
               <header>
                 <span class="kid">#{card.Id}</span>
                 <button class="icon" aria-label="Remove" @click={Ev(fun _ -> dispatch (Remove card.Id))}>&times;</button>
@@ -152,22 +237,28 @@ let private cardView grab dispatch (card: Card) =
               </footer>
             </article>"""
 
-let private laneView grab dispatch cards lane =
-    let inLane = cards |> List.filter (fun c -> c.Lane = lane)
+let private laneView press model dispatch lane =
+    let inLane = model.Cards |> List.filter (fun c -> c.Lane = lane)
+
+    let over =
+        match model.Drag with
+        | Some { Moving = true; Target = Some(target, _) } -> target = lane
+        | _ -> false
 
     html
-        $"""<section class={"lane " + laneKey lane} data-lane={laneKey lane}>
+        $"""<section class={"lane " + laneKey lane} data-lane={laneKey lane} ?data-over={over}>
               <header>
                 <h3>{laneName lane}</h3>
                 <span class="count">{inLane.Length}</span>
                 <button class="icon" aria-label={"Add to " + laneName lane}
                         @click={Ev(fun _ -> dispatch (Add lane))}>+</button>
               </header>
-              {Lit.ofList (inLane |> List.map (cardView grab dispatch))}
+              {Lit.ofList (inLane |> List.map (cardView press model.Drag model.Dropped dispatch))}
             </section>"""
 
-/// `grab` makes the handler a card is picked up with, given the card's id.
-let view (grab: int -> EvHandler) model dispatch =
+/// `press` makes the handler a card is pressed with, given the card's id: it reads the
+/// pointer, which only the browser can, and dispatches `Press`.
+let view (press: int -> EvHandler) model dispatch =
     html
         $"""<section class="card board">
               <h2>Kanban</h2>
@@ -180,5 +271,5 @@ let view (grab: int -> EvHandler) model dispatch =
                 <button ?disabled={List.isEmpty model.History} @click={Ev(fun _ -> dispatch Undo)}>undo</button>
                 <span class="tally"><b class="cards">{model.Cards.Length}</b> cards</span>
               </div>
-              <div class="lanes">{Lit.ofList (lanes |> List.map (laneView grab dispatch model.Cards))}</div>
+              <div class="lanes">{Lit.ofList (lanes |> List.map (laneView press model dispatch))}</div>
             </section>"""

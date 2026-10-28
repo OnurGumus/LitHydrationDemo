@@ -118,13 +118,19 @@ Program.mkProgram Views.Shelf.init Views.Shelf.update (fun model dispatch ->
 Meter.register ()
 
 // The board, mounted like the first two. Its buttons go through the transition queue
-// like every other island's. A drop goes through it as well, and puts the card down
-// inside the update: by then the browser has its picture of the card where the pointer
-// left it, so the card glides from there into its lane.
+// like every other island's, and so does a drop: by then the browser has its picture of
+// the card where the pointer left it, so the card glides from there into its lane. The
+// pointer's own messages go straight to the program, one per move, with no transition.
+//
+// The document is listened to only while a card is pressed. The subscription is named
+// for whether the press has become a drag, so it is set up again when it does, and knows
+// how its drop has to be dispatched.
 Program.mkProgram Kanban.init Kanban.update (fun model dispatch ->
-    let drop = ViewTransitions.dispatch "kanban" (fun msg -> Drag.release (); dispatch msg)
-    let grab id = Drag.grab (fun lane index -> drop (Kanban.Move(id, Kanban.laneOf lane, index)))
-    Kanban.view grab model (ViewTransitions.dispatch "kanban" dispatch))
+    Kanban.view (Drag.press dispatch) model (ViewTransitions.dispatch "kanban" dispatch))
+|> Program.withSubscription (fun model ->
+    match model.Drag with
+    | Some drag -> [ [ "drag"; string drag.Moving ], fun dispatch -> Drag.listen drag (ViewTransitions.dispatch "kanban" dispatch) dispatch ]
+    | None -> [])
 |> Program.withLitHydrated "kanban"
 |> Program.run
 

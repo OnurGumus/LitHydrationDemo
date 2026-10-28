@@ -71,6 +71,9 @@
          in no promised order against the cards, and its background can cover a card
          flying into it. Unnamed, they are part of the page underneath. */
       html[data-transition="kanban"] #kanban .kcard { view-transition-name: var(--card-transition); view-transition-class: kcard; }
+      /* The card a drop is putting down passes over the lane's other cards, not under. */
+      html[data-transition="kanban"] #kanban .kcard[data-dropped] { view-transition-class: kcard dropped; }
+      ::view-transition-group(.dropped) { z-index: 1; }
       ::view-transition-group(*) { animation-duration: 450ms; animation-timing-function: ease-in-out; }
       ::view-transition-new(.kcard):only-child { animation: 300ms ease-out both card-in; }
       ::view-transition-old(.kcard):only-child { animation: 250ms ease-in both card-out; }
