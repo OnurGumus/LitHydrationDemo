@@ -10,7 +10,7 @@
     <Compile Include="ViewTransitions.fs" />
     <Compile Include="ThemeBadge.fs" />
     <Compile Include="Meter.fs" />
-    <Compile Include="Drag.fs" />
+    <Compile Include="KCard.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
   <ItemGroup>

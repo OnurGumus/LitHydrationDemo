@@ -183,9 +183,9 @@ let main args =
                         // the view says what the component draws, and that is written
                         // into the component's tag as its shadow root.
                         .Shelf(toHydratableNode (Views.Shelf.view shelf ignore))
-                        // Nothing to press a card with here: the board is drawn still,
-                        // and reading the pointer is the browser's.
-                        .Kanban(toHydratableNode (Kanban.view (fun _ -> Ev ignore) kanban ignore))
+                        // An island with a component per card, like the shelf with its
+                        // meter: one call draws the board and every card's shadow root.
+                        .Kanban(toHydratableNode (Kanban.view ignore kanban ignore))
                         .ThemePayload(themePayload theme)
                         // The attribute the stylesheet keys off, written before anything
                         // is sent: this is the difference between a page that is dark and

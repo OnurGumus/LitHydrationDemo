@@ -117,22 +117,16 @@ Program.mkProgram Views.Shelf.init Views.Shelf.update (fun model dispatch ->
 
 Meter.register ()
 
-// The board, mounted like the first two. Its buttons go through the transition queue
-// like every other island's, and so does a drop: by then the browser has its picture of
-// the card where the pointer left it, so the card glides from there into its lane. The
-// pointer's own messages go straight to the program, one per move, with no transition.
-//
-// The document is listened to only while a card is pressed. The subscription is named
-// for whether the press has become a drag, so it is set up again when it does, and knows
-// how its drop has to be dispatched.
+// The board, mounted like the first two, with a component for each card. Its toolbar's
+// buttons go through the transition queue like every other island's. The cards are
+// handed the program's own dispatch instead, because each card puts its messages
+// through the queue itself: a drop has to put the card down inside the transition.
 Program.mkProgram Kanban.init Kanban.update (fun model dispatch ->
-    Kanban.view (Drag.press dispatch) model (ViewTransitions.dispatch "kanban" dispatch))
-|> Program.withSubscription (fun model ->
-    match model.Drag with
-    | Some drag -> [ [ "drag"; string drag.Moving ], fun dispatch -> Drag.listen drag (ViewTransitions.dispatch "kanban" dispatch) dispatch ]
-    | None -> [])
+    Kanban.view dispatch model (ViewTransitions.dispatch "kanban" dispatch))
 |> Program.withLitHydrated "kanban"
 |> Program.run
+
+KCard.register ()
 
 // What a theme actually has to do, which is neither island's business and certainly not
 // the store's: paint the page, and remember the choice so the *server* can paint it next

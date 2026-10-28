@@ -136,7 +136,7 @@ switch sits at the top of the page, and comes fifth here).
 | [5](#lesson-5-theme-state-only-the-server-knows) | Theme switch, Theme reader | State only the server knows, shared through a store |
 | [6](#lesson-6-theme-badge-a-real-component) | Theme badge | A real lit component, rendered by the server |
 | [7](#lesson-7-shelf-a-component-inside-an-island) | Shelf | A component inside an island |
-| [8](#lesson-8-kanban-motion-only-in-the-browser) | Kanban | Motion only in the browser, and browser code handed to a shared view |
+| [8](#lesson-8-kanban-cards-that-move-themselves) | Kanban | Components that own their gesture, inside an island that owns the cards |
 
 Each lesson is laid out the same way: **what you see**, **the idea**, **the code**,
 something to **try**, anything to **watch out** for, and a one-line takeaway.
@@ -751,80 +751,92 @@ component. Production builds stay quiet.
 > **Takeaway.** A component inside an island arrives rendered when the view says what it
 > draws. If the island hands it a property, it waits for the island.
 
-### Lesson 8. Kanban: motion only in the browser
+### Lesson 8. Kanban: cards that move themselves
 
 **What you see.** A board with three lanes. Drag a card to another lane, or use its arrows.
 Cards glide between lanes, pop in when added and fade out when removed. **Undo** steps
 back through earlier boards.
 
-**The idea.** The server draws the board standing still. It is an island like the counter:
-`Kanban.init` is a fixed board, the server renders it, and the browser adopts it.
-Everything that moves happens in the browser:
+**The idea.** The board is an island like the counter: `Kanban.init` is a fixed board,
+the server renders it, and the browser adopts it. Each card on it is a component,
+`<bfb-kcard>`, inside the island the way the meter is inside the shelf. The two split the
+work:
 
-- **Gliding, arriving and leaving** are View Transitions, which is CSS. Each card gets a
-  transition name of its own, so the browser follows each card to wherever it went, even
-  into another lane.
-- **Dragging** is an ordinary Elmish loop. The model holds the drag: which card, how far it
-  has moved, and the lane it would land in. Every pointer move is a message, and the view
-  draws the card where the pointer is. The server's model never has a drag in it, so
-  it always draws the board still.
+- **The board keeps the cards:** which lane each one is in, in what order, and the
+  earlier boards that undo steps back through.
+- **Each card keeps its own gesture:** whether it is pressed, and how far it has moved.
+  While you drag, only that card renders. The board hears two things: the lane the card
+  is over, so it can light it, and where the card was dropped.
 
-Two things in a drag only the browser can do: read the pointer, and work out what is
-under it. `Shared/Kanban.fs` also compiles on .NET, so it cannot do either. The browser
-does them in `Client/Drag.fs` and reports the results as messages.
+Everything that moves happens in the browser. Gliding, arriving and leaving are View
+Transitions, which is CSS: each card has a transition name of its own, so the browser
+follows it to wherever it went, even into another lane. The server never draws a drag,
+so the server's board is always still.
 
-**The code.** The view is handed the pointer-down handler, because only the browser can
-read the event:
+**The code.** The board hands each card its data and the program's `dispatch` as
+properties, and says what the card draws:
 
 ```fsharp
 // Shared/Kanban.fs
-let view (press: int -> EvHandler) model dispatch = ...
-//   each card:  <article class="kcard" ... @pointerdown={press card.Id}>
+<bfb-kcard class="kcard" data-card={card.Id} style={"--card-transition: kanban-" + string card.Id}
+           ?data-dropped={dropped = Some card.Id} .card={card} .send={send}>{CardView.drawn card}</bfb-kcard>
 ```
 
-The server hands it one that does nothing, which suits the server: it drops handlers
-anyway.
+As with the meter, the properties are not in the HTML, so the server marks each card
+`defer-hydration`, and `CardView.drawn` writes the card's shadow root into its tag.
+
+The card's view takes how far a drag has moved, or `None`:
 
 ```fsharp
-// Server/Program.fs
-.Kanban(toHydratableNode (Kanban.view (fun _ -> Ev ignore) kanban ignore))
+// Shared/Kanban.fs, in CardView
+let view (card: Card) (offset: (float * float) option) (hands: Hands) =
+    let drag = offset |> Option.map lifted |> Option.defaultValue Lit.nothing
+    html $"""{drag}<article @pointerdown={hands.Press} ...>"""
 ```
 
-The browser hands it the real one, and listens to the page only while a card is pressed,
-with a subscription:
+`lifted` is a second stylesheet, `<style>:host { transform: translate(…) }</style>`. The
+transition follows the card's tag, so the tag is what has to move, and `:host` is how a
+component styles its own tag from inside. Nothing writes to the page: the drag is drawn,
+like everything else.
+
+The component keeps the gesture in hook state. A drop goes through the transition queue,
+and inside it the card puts itself down before it tells the board:
 
 ```fsharp
-// Client/App.fs
-Program.mkProgram Kanban.init Kanban.update (fun model dispatch ->
-    Kanban.view (Drag.press dispatch) model (ViewTransitions.dispatch "kanban" dispatch))
-|> Program.withSubscription (fun model ->
-    match model.Drag with
-    | Some drag -> [ [ "drag"; string drag.Moving ], fun dispatch -> Drag.listen drag (ViewTransitions.dispatch "kanban" dispatch) dispatch ]
-    | None -> [])
+// Client/KCard.fs
+let putDown where =
+    ViewTransitions.dispatch "kanban"
+        (fun msg ->
+            setGesture None   // the card puts itself down,
+            setOffset (0.0, 0.0)
+            over.Value <- None
+            send msg)         // then tells the board where
+        (Drop(card.Id, where))
 ```
 
-Pointer moves go straight to the program, with no transition. The drop goes through the
-transition queue like a button click, and that is the trick behind the glide. When the
-transition starts, the browser takes its "before" picture with the card still under the
-pointer. Then one update ends the drag and moves the card, so the "after" picture has it
-in its lane, and the browser animates between the two. A cancelled drag (**Escape**, or a
-drop outside the lanes) glides back the same way.
+That is the trick behind the glide. When the transition starts, the browser takes its
+"before" picture with the card under the pointer. Inside the update, the card drops its
+drag stylesheet and the board moves it, so the "after" picture has the card in its lane,
+and the browser animates between the two. A cancelled drag (**Escape**, or a drop outside
+the lanes) is a `Drop` with nowhere to land, and glides back the same way.
 
 **Try it.**
 
 ```js
 const board = () => [...document.querySelectorAll('#kanban [data-lane]')].map(lane => lane.dataset.lane + ': ' + [...lane.querySelectorAll('[data-card]')].map(c => c.dataset.card).join(','))
 board()                                                                  // ['backlog: 1,2', 'progress: 3', 'shipped: 4']
-document.querySelector('#kanban [data-card="1"] [aria-label="Move right"]').click()
+const firstCard = document.querySelector('#kanban .kcard')
+firstCard.tagName                                                        // 'BFB-KCARD'
+firstCard.shadowRoot.querySelector('[aria-label="Move right"]').click()
 board()                                                                  // ['backlog: 2', 'progress: 3,1', 'shipped: 4']
 document.querySelector('#kanban .toolbar button:nth-child(4)').click()   // undo
 board()                                                                  // back where it started
-const firstCard = document.querySelector('#kanban .kcard')
 getComputedStyle(firstCard).viewTransitionName                           // "none"
 ```
 
-The last line says `none` because a card only has its transition name while the board is
-animating. The basket rows work the same way.
+The card's buttons are inside its shadow root, which is why the arrow is found through
+`firstCard.shadowRoot`. The last line says `none` because a card only has its transition
+name while the board is animating. The basket rows work the same way.
 
 **Watch out.**
 
@@ -835,19 +847,28 @@ animating. The basket rows work the same way.
   browser does not promise to stack those pictures in page order, and a lane's background
   can cover a card flying into it. Unnamed lanes are part of the page underneath every
   card.
+- Hand the cards the program's own `dispatch`, not the queued one the toolbar uses. A
+  card puts its messages through the transition queue itself. Handed the queued one, its
+  drop would become a second transition after the first, and the card would go back to
+  its place before moving to the new one.
+- The transition waits for the cards to render. An island renders at once, but a
+  component schedules its render, and a card dropping its drag stylesheet is a render. So
+  `Client/ViewTransitions.fs` waits for every `bfb-kcard`, as it does for the badge and
+  the meter. A new component that changes during a transition goes on that list too.
+- A card's gesture belongs to the card it picked up, not to the element. The board draws
+  cards into elements by position, so if the board redraws while a card is held (another
+  card dropped above it, with a second finger), the element can end up showing a different
+  card. `Client/KCard.fs` keeps the id the press picked up, drops with that id, and treats
+  a press on any other card as over, so the held card goes back to its place instead of
+  the wrong card moving.
 - The dropped card has to pass over the lane's other cards as it glides, not under them.
-  The view marks it with `data-dropped`, and one rule in the stylesheet lifts its picture
+  The board marks it with `data-dropped`, and one rule in the stylesheet lifts its picture
   above the rest of the transition. The mark comes from the model, not from an element,
   because `Lit.ofList` reuses elements: after a move, the element that showed card 1 may
   be showing card 2.
-- The subscription's name includes whether the press has become a drag. Elmish starts a
-  subscription again only when its name changes, and the listener has to know which kind
-  of release it is: a click goes straight to the program, a drop goes through the
-  transition.
 
 > **Takeaway.** The server draws the state. The browser draws the motion: from CSS, and
-> from a drag that is ordinary model and messages, fed by handlers the shared view is
-> handed.
+> from components that own their gesture and tell the island only what it needs.
 
 ## Cheat sheet
 
@@ -863,7 +884,7 @@ Which function to use for which job:
 | A component inside a view | `Lit.shadowRoot styles view`, first thing inside its tag | `Hydrate.elements ()`, once |
 | State only the server knows | JSON in a `<script type="application/json">` | A store that reads it once |
 | An island that must know when it leaves the page | A container whose tag has a dash in it | `Lit.trackConnection ("tag", handler)` |
-| A view that needs a browser-only handler | Pass the view one that does nothing: `fun _ -> Ev ignore` | Pass the view the real one |
+| A component whose view has handlers in it | Hand the view ones that do nothing, like `CardView.still` | The component hands it its real ones |
 
 And the three ways to keep [the one rule](#the-one-rule):
 
@@ -915,7 +936,7 @@ All browser-specific code is in the client project, so the shared views still co
 | `Client/ThemeBadge.fs` | The component that reads the store |
 | `Client/Meter.fs` | The component inside the shelf island |
 | `Client/ViewTransitions.fs` | Wraps updates in a view transition |
-| `Client/Drag.fs` | Reading the pointer for a board drag, and what is under it |
+| `Client/KCard.fs` | A board card: the component that owns its drag |
 | `Server/Program.fs` | A minimal ASP.NET app that renders every view into the page |
 | `Server/page.html` | The page shell: an `HtmlTypeProvider` template with one container per card |
 

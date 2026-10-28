@@ -3,11 +3,11 @@
 /// Compiled twice like Views.fs, and adopted the same way: the server draws the board
 /// from `init`, still, and the browser adopts it. Everything that moves is the browser's
 /// alone. Cards glide between lanes, and come and go, on the page's View Transitions,
-/// which is CSS. A drag is part of the model like everything else: where the card is,
-/// which lane it is over, and the drop. The browser does what only it can, and reports
-/// it as messages: it reads the pointer, and works out what is under it (Client/Drag.fs).
-/// The server draws `Drag = None`, and hands the view a `press` that does nothing,
-/// because the server drops handlers anyway.
+/// which is CSS. Each card is a component, `<bfb-kcard>` (Client/KCard.fs), and a drag
+/// is the card's own business: it follows the pointer, and tells the board two things,
+/// the lane it is over and where it was dropped. The board keeps the cards; the cards
+/// keep their gestures. The server draws every card's shadow root from `CardView`
+/// below, and the browser's cards take them over.
 module Kanban
 
 open Elmish
@@ -20,27 +20,14 @@ type Lane =
 
 type Card = { Id: int; Title: string; Lane: Lane }
 
-/// A card under the pointer, from press to drop. It is a drag once it has moved.
-type Drag =
-    { Card: int
-      Pointer: float
-      /// Where the press started.
-      X: float
-      Y: float
-      /// How far the pointer has gone since.
-      Dx: float
-      Dy: float
-      Moving: bool
-      /// The lane it would land in, and how many of that lane's other cards are above it.
-      Target: (Lane * int) option }
-
 /// `History` is the earlier boards, newest first, so undo is taking the head.
-/// `Dropped` is the card that landed last, while it is landing.
+/// `Over` is the lane a dragged card is over, and `Dropped` the card that landed last,
+/// while it is landing.
 type Model =
     { Cards: Card list
       NextId: int
       History: Card list list
-      Drag: Drag option
+      Over: Lane option
       Dropped: int option }
 
 type Msg =
@@ -48,14 +35,11 @@ type Msg =
     | Remove of int
     /// A card's arrow: one lane left (-1) or right (+1).
     | Step of int * int
-    /// The card, the pointer and where it was pressed.
-    | Press of int * float * float * float
-    /// Where the pointer is, and where the card would land if dropped there.
-    | Point of float * float * (Lane * int) option
-    /// Puts the card down: in the lane it is over, or back where it came from.
-    | Drop
-    /// Puts the card back where it came from.
-    | Cancel
+    /// The lane a dragged card is over, if any.
+    | Over of Lane option
+    /// A dragged card, and where it landed: a lane and how many of that lane's other
+    /// cards are above it, or nowhere, and it goes back.
+    | Drop of int * (Lane * int) option
     | Shuffle
     | Clear
     | Undo
@@ -97,7 +81,7 @@ let init () =
     { Cards = [ card 1 Backlog; card 2 Backlog; card 3 InProgress; card 4 Shipped ]
       NextId = 5
       History = []
-      Drag = None
+      Over = None
       Dropped = None },
     Cmd.none
 
@@ -130,9 +114,6 @@ let private commit model cards =
             Cards = cards
             History = List.truncate 50 (model.Cards :: model.History) }
 
-/// A press is a drag only once it has moved this far, so a click stays a click.
-let private threshold = 4.0
-
 let update msg model =
     match msg with
     | Add lane ->
@@ -148,48 +129,16 @@ let update msg model =
             else
                 commit model (place id lanes.[target] System.Int32.MaxValue model.Cards), Cmd.none
         | None -> model, Cmd.none
-    | Press(id, pointer, x, y) when model.Drag.IsNone ->
-        { model with
-            Drag =
-                Some
-                    { Card = id
-                      Pointer = pointer
-                      X = x
-                      Y = y
-                      Dx = 0.0
-                      Dy = 0.0
-                      Moving = false
-                      Target = None } },
-        Cmd.none
-    | Press _ -> model, Cmd.none
-    | Point(x, y, target) ->
-        match model.Drag with
-        | Some drag ->
-            let dx, dy = x - drag.X, y - drag.Y
+    | Over lane -> { model with Over = lane }, Cmd.none
+    | Drop(id, target) ->
+        let cards =
+            match target with
+            | Some(lane, index) -> place id lane index model.Cards
+            | None -> model.Cards
 
-            { model with
-                Drag =
-                    Some
-                        { drag with
-                            Dx = dx
-                            Dy = dy
-                            Moving = drag.Moving || sqrt (dx * dx + dy * dy) >= threshold
-                            Target = target } },
-            Cmd.none
-        | None -> model, Cmd.none
-    | Drop
-    | Cancel ->
-        match model.Drag with
-        | Some({ Moving = true } as drag) ->
-            let cards =
-                match msg, drag.Target with
-                | Drop, Some(lane, index) -> place drag.Card lane index model.Cards
-                | _ -> model.Cards
-
-            // The one card that lands over the others as it glides: the stylesheet lifts
-            // a card with `data-dropped` above the rest of the transition.
-            { commit model cards with Drag = None; Dropped = Some drag.Card }, Cmd.none
-        | _ -> { model with Drag = None }, Cmd.none
+        // The one card that lands over the others as it glides: the stylesheet lifts a
+        // card with `data-dropped` above the rest of the transition.
+        { commit model cards with Over = None; Dropped = Some id }, Cmd.none
     | Shuffle ->
         model.Cards
         |> List.map (fun c -> random.Next(), { c with Lane = lanes.[random.Next lanes.Length] })
@@ -203,47 +152,100 @@ let update msg model =
         | previous :: earlier -> { model with Cards = previous; History = earlier; Dropped = None }, Cmd.none
         | [] -> model, Cmd.none
 
+/// What a card draws inside its shadow root: the same on the server, which writes it
+/// into the card's tag, and in Client/KCard.fs, which takes it over.
+module CardView =
+
+    /// A string, because the server writes it into a style element in the card's root,
+    /// and Client/KCard.fs hands the same text to lit. The page's rules stop at the root;
+    /// its custom properties, the lane's `--accent` among them, come in.
+    let styles =
+        """
+        :host { display: block; position: relative; margin-bottom: .5rem; }
+        article { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+                  border-radius: 8px; padding: .4rem .5rem .3rem .75rem;
+                  cursor: grab; touch-action: none; user-select: none; }
+        header, footer { display: flex; justify-content: space-between; align-items: center; }
+        footer { justify-content: flex-end; }
+        .kid { font-size: .75rem; color: var(--quiet); }
+        p { margin: .1rem 0; }
+        button { font: inherit; padding: 0 .45rem; color: var(--quiet); background: none;
+                 border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+        button:hover { border-color: var(--ink); }
+        button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+        button:disabled { opacity: .4; cursor: default; }
+        button:disabled:hover { border-color: transparent; }
+        """
+
+    /// Everything a card does with the pointer and its buttons. Only the browser's card
+    /// has real ones; the server's do nothing, because the server drops handlers anyway.
+    type Hands =
+        { Press: EvHandler
+          Move: EvHandler
+          Up: EvHandler
+          Cancel: EvHandler
+          Remove: EvHandler
+          Left: EvHandler
+          Right: EvHandler }
+
+    let still =
+        { Press = Ev ignore
+          Move = Ev ignore
+          Up = Ev ignore
+          Cancel = Ev ignore
+          Remove = Ev ignore
+          Left = Ev ignore
+          Right = Ev ignore }
+
+    /// A dragged card, `dx` and `dy` from where it was pressed. The transition follows
+    /// the card's tag, so it is the tag, the shadow root's host, that moves; this is a
+    /// second stylesheet in the root that says so, and is only there during a drag.
+    let private lifted (dx: float, dy: float) =
+        let rules =
+            $":host {{ z-index: 2; transform: translate({dx}px, {dy}px) rotate(2deg); }} "
+            + "article { cursor: grabbing; box-shadow: 0 12px 28px rgb(0 0 0 / .25); }"
+
+        html $"""<style>{rules}</style>"""
+
+    /// `offset` is how far a dragged card has moved, or `None` when it is not being
+    /// dragged, which is always the case on the server.
+    let view (card: Card) (offset: (float * float) option) (hands: Hands) =
+        let position = List.findIndex ((=) card.Lane) lanes
+        let drag = offset |> Option.map lifted |> Option.defaultValue Lit.nothing
+
+        html
+            $"""{drag}<article @pointerdown={hands.Press} @pointermove={hands.Move}
+                         @pointerup={hands.Up} @pointercancel={hands.Cancel}>
+                  <header>
+                    <span class="kid">#{card.Id}</span>
+                    <button aria-label="Remove" @click={hands.Remove}>&times;</button>
+                  </header>
+                  <p>{card.Title}</p>
+                  <footer>
+                    <button aria-label="Move left" ?disabled={position = 0} @click={hands.Left}>&larr;</button>
+                    <button aria-label="Move right" ?disabled={position = lanes.Length - 1}
+                            @click={hands.Right}>&rarr;</button>
+                  </footer>
+                </article>"""
+
+    /// The card's shadow root, for the board's view: what the server writes into the
+    /// card's tag, and `Lit.nothing` in the browser.
+    let drawn card = Lit.shadowRoot styles (view card None still)
+
 /// `--card-transition` is the card's name while the board is animating: one name per
 /// card, so the browser can follow each one to wherever it went.
-let private cardView press (drag: Drag option) dropped dispatch (card: Card) =
-    let position = List.findIndex ((=) card.Lane) lanes
-
-    // Only the card being dragged moves, and only the transform: it stays in its lane
-    // until the drop, so nothing else on the board moves with it.
-    let lifted =
-        match drag with
-        | Some drag when drag.Moving && drag.Card = card.Id -> Some drag
-        | _ -> None
-
-    let style =
-        match lifted with
-        | Some drag -> $"--card-transition: kanban-{card.Id}; transform: translate({drag.Dx}px, {drag.Dy}px) rotate(2deg)"
-        | None -> $"--card-transition: kanban-{card.Id}"
-
+///
+/// The card is handed itself and `send`, the program's own dispatch: it puts its
+/// messages through the transition queue itself, because a drop has to put the card down
+/// inside the same transition.
+let private cardView send dropped (card: Card) =
     html
-        $"""<article class="kcard" data-card={card.Id} style={style}
-                     ?data-dragging={lifted.IsSome} ?data-dropped={dropped = Some card.Id}
-                     @pointerdown={press card.Id}>
-              <header>
-                <span class="kid">#{card.Id}</span>
-                <button class="icon" aria-label="Remove" @click={Ev(fun _ -> dispatch (Remove card.Id))}>&times;</button>
-              </header>
-              <p>{card.Title}</p>
-              <footer>
-                <button class="icon" aria-label="Move left" ?disabled={position = 0}
-                        @click={Ev(fun _ -> dispatch (Step(card.Id, -1)))}>&larr;</button>
-                <button class="icon" aria-label="Move right" ?disabled={position = lanes.Length - 1}
-                        @click={Ev(fun _ -> dispatch (Step(card.Id, 1)))}>&rarr;</button>
-              </footer>
-            </article>"""
+        $"""<bfb-kcard class="kcard" data-card={card.Id} style={"--card-transition: kanban-" + string card.Id}
+                       ?data-dropped={dropped = Some card.Id} .card={card} .send={send}>{CardView.drawn card}</bfb-kcard>"""
 
-let private laneView press model dispatch lane =
+let private laneView send model dispatch lane =
     let inLane = model.Cards |> List.filter (fun c -> c.Lane = lane)
-
-    let over =
-        match model.Drag with
-        | Some { Moving = true; Target = Some(target, _) } -> target = lane
-        | _ -> false
+    let over = model.Over = Some lane
 
     html
         $"""<section class={"lane " + laneKey lane} data-lane={laneKey lane} ?data-over={over}>
@@ -253,12 +255,12 @@ let private laneView press model dispatch lane =
                 <button class="icon" aria-label={"Add to " + laneName lane}
                         @click={Ev(fun _ -> dispatch (Add lane))}>+</button>
               </header>
-              {Lit.ofList (inLane |> List.map (cardView press model.Drag model.Dropped dispatch))}
+              {Lit.ofList (inLane |> List.map (cardView send model.Dropped))}
             </section>"""
 
-/// `press` makes the handler a card is pressed with, given the card's id: it reads the
-/// pointer, which only the browser can, and dispatches `Press`.
-let view (press: int -> EvHandler) model dispatch =
+/// `send` is what the cards are handed: the program's own dispatch, where `dispatch`
+/// is the one the toolbar's buttons go through.
+let view (send: Msg -> unit) model dispatch =
     html
         $"""<section class="card board">
               <h2>Kanban</h2>
@@ -271,5 +273,5 @@ let view (press: int -> EvHandler) model dispatch =
                 <button ?disabled={List.isEmpty model.History} @click={Ev(fun _ -> dispatch Undo)}>undo</button>
                 <span class="tally"><b class="cards">{model.Cards.Length}</b> cards</span>
               </div>
-              <div class="lanes">{Lit.ofList (lanes |> List.map (laneView press model dispatch))}</div>
+              <div class="lanes">{Lit.ofList (lanes |> List.map (laneView send model dispatch))}</div>
             </section>"""

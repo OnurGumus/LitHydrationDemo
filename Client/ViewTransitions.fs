@@ -14,8 +14,9 @@ open Fable.Core
             const update = async () => {
                 change();
                 // Islands render immediately; a LitElement schedules its render, whether
-                // it heard from the store or was handed a property by an island.
-                await Promise.all(Array.from(document.querySelectorAll('bfb-theme-badge, bfb-meter'),
+                // it heard from the store, was handed a property by an island, or
+                // changed its own state, as a board card does when it is put down.
+                await Promise.all(Array.from(document.querySelectorAll('bfb-theme-badge, bfb-meter, bfb-kcard'),
                     element => element.updateComplete));
             };
             if (!document.startViewTransition ||

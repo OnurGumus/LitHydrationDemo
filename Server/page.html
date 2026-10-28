@@ -47,15 +47,7 @@
       .count { font-size: .8rem; color: var(--quiet); }
       button.icon { padding: 0 .45rem; border-color: transparent; background: none; color: var(--quiet); }
       .lane > header button.icon { margin-left: auto; }
-      .kcard { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent);
-               border-radius: 8px; padding: .4rem .5rem .3rem .75rem; margin-bottom: .5rem;
-               cursor: grab; touch-action: none; user-select: none; }
-      .kcard[data-dragging] { position: relative; z-index: 2; cursor: grabbing;
-                              box-shadow: 0 12px 28px rgb(0 0 0 / .25); }
-      .kcard header, .kcard footer { display: flex; justify-content: space-between; align-items: center; }
-      .kcard footer { justify-content: flex-end; }
-      .kid { font-size: .75rem; color: var(--quiet); }
-      .kcard p { margin: .1rem 0; }
+      /* The cards are components, styled inside their own shadow roots (Kanban.CardView). */
 
       /* Names are enabled only for the interaction being animated. Theme changes
          use the single root snapshot, including all shadow-root contents. */
@@ -118,8 +110,9 @@
       own shadow root, and took that over. The eighth is an island with a component in
       it. The island adopts its markup and hands the component its level, and only then
       does the component take over the shadow root that arrived inside its tag. The ninth is a
-      board, an island like the first two that the server draws standing still. Dragging its
-      cards, and their gliding from lane to lane, belong to the browser alone.</p>
+      board, an island like the first two that the server draws standing still, and each card
+      on it is a component that drags itself. The dragging, and the gliding from lane to lane,
+      belong to the browser alone.</p>
     </details>
 
     <!-- One container per component. Each is the element its own markers were written
@@ -154,8 +147,9 @@
          it is marked to wait until the island has hydrated. -->
     <div id="shelf">${Shelf}</div>
 
-    <!-- An island like the first two, drawn still. Everything that moves on it is the
-         browser's: the drag, and the transitions in the stylesheet above. -->
+    <!-- An island like the first two, drawn still, with a component for each card, drawn
+         like the meter. Everything that moves on it is the browser's: each card's drag, and
+         the transitions in the stylesheet above. -->
     <div id="kanban">${Kanban}</div>
 
     ${ThemePayload}
