@@ -389,11 +389,13 @@ Lit.trackConnection (
         { new System.IDisposable with
             member _.Dispose() = console.log "bfb-panel disconnected" }
 )
+|> HMR.disposeOnUpdate
 ```
 
 The function runs when the element joins the document. The `IDisposable` it returns runs
 when the element leaves. A timer or a socket would be started and stopped in the same two
-places.
+places. The last line only matters while you edit the demo: it undoes the tracking when a
+hot update runs `App.fs` again (see [Editing it while it runs](#editing-it-while-it-runs)).
 
 **Try it.** Open the console and reload. `bfb-panel connected` is already there, from
 when the page loaded. Then:
@@ -985,15 +987,15 @@ first rebuilt in the new code's types, so its unions and records still compare e
 whose module runs again draws with the new code. A model that no longer fits, such as one
 missing a field you just added, is dropped for `init` with a warning in the console.
 
-**Everything else is replaced, not added to.** A hot update runs all of `Client/App.fs`
-again, and only the programs know how to take over from the last run. The rest (the
+**Everything else is undone first.** A hot update runs all of `Client/App.fs` again, and
+only the programs and components know how to take over from the last run. The rest (the
 panel's connection tracker, the theme islands' store subscriptions, and the subscriber
-that paints the page) would be set up a second time beside the first, and the theme
-islands would try to adopt markup that is no longer the server's. So `App.fs` keeps each
-of them on a node with `replaceOn`: a run disposes what the last one left there, and the
-theme islands render instead of adopting when there was something. That is why the
-console shows `bfb-panel disconnected` and `bfb-panel connected` once each on every hot
-update: the old tracker letting go, and the new one finding the panel already there.
+that paints the page) would be set up a second time beside the first. Each of them ends
+in `|> HMR.disposeOnUpdate`, which undoes it when the next version of the module replaces
+this one. The theme islands call `Hydrate.adopt` again, which renders into a container
+lit already owns rather than trying to adopt it. That is why the console shows
+`bfb-panel disconnected` and `bfb-panel connected` once each on every hot update: the old
+tracker letting go, and the new one finding the panel already there.
 
 **A dev server is needed, not just a rebuilt bundle.** Vite gives every version of the
 code the *same* copy of lit. Rebuilding a self-contained bundle and importing it again
